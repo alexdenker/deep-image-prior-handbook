@@ -1,0 +1,8 @@
+im_size: 501
+data_path: 'data/'
+walnut_id: 1
+fold: 'test'
+scaling_factor: 14
+angular_sub_sampling: 20
+proj_col_sub_sampling: 6
+orbit_id: 2
