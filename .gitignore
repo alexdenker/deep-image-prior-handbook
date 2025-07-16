@@ -5,3 +5,5 @@ wandb/
 
 *.pyc
 *.mat
+
+.ipynb_checkpoints/
