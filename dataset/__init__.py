@@ -1,9 +1,9 @@
-from .ellipses import (
-    EllipsesDataset,
-    get_ellipses_dataset,
-    DiskDistributedEllipsesDataset,
-    get_disk_dist_ellipses_dataset,
-)
+#from .ellipses import (
+#    EllipsesDataset,
+#    get_ellipses_dataset,
+#    DiskDistributedEllipsesDataset,
+#    get_disk_dist_ellipses_dataset,
+#)
 from .walnut import (
     get_walnut_2d_observation,
     get_walnut_2d_ground_truth,
