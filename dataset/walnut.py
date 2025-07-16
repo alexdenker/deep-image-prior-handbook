@@ -199,19 +199,20 @@ def get_walnut_data(config, ray_trafo):
     noisy_observation = get_walnut_2d_observation(
         data_path=config.data.data_path,
         walnut_id=config.data.walnut_id,
-        orbit_id=config.forward_op.orbit_id,
-        angular_sub_sampling=config.forward_op.angular_sub_sampling,
-        proj_col_sub_sampling=config.forward_op.proj_col_sub_sampling,
+        orbit_id=config.data.orbit_id,
+        angular_sub_sampling=config.data.angular_sub_sampling,
+        proj_col_sub_sampling=config.data.proj_col_sub_sampling,
         scaling_factor=config.data.scaling_factor,
     ).to(device=config.device)
     ground_truth = get_walnut_2d_ground_truth(
         data_path=config.data.data_path,
         walnut_id=config.data.walnut_id,
-        orbit_id=config.forward_op.orbit_id,
+        orbit_id=config.data.orbit_id,
         scaling_factor=config.data.scaling_factor,
     ).to(device=config.device)
     if hasattr(ray_trafo, "resize"):
-        ground_truth = ray_trafo.resize(ground_truth.unsqueeze(0)).squeeze(dim=0)
+        if ray_trafo.resize is not None:
+            ground_truth = ray_trafo.resize(ground_truth.unsqueeze(0)).squeeze(dim=0)
 
     filtbackproj = ray_trafo.fbp(noisy_observation[None].to(device=config.device))[
         0
