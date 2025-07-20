@@ -1,8 +1,18 @@
-
-import os 
 import numpy as np
 import torch
 import random
+
+import matplotlib.pyplot as plt 
+import skimage 
+from skimage.transform import resize
+from skimage.metrics import peak_signal_noise_ratio
+
+from tqdm import tqdm
+
+import wandb
+
+from deepinv.physics import Tomography
+from deepinv.optim.utils import conjugate_gradient
 
 device = "cpu"
 
@@ -15,20 +25,6 @@ torch.cuda.manual_seed_all(1)
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 torch.use_deterministic_algorithms(True)
-
-#os.environ['CUBLAS_WORKSPACE_CONFIG'] = ':4096:8'
-
-import matplotlib.pyplot as plt 
-import skimage 
-from skimage.transform import resize
-from skimage.metrics import peak_signal_noise_ratio
-
-from tqdm import tqdm
-
-import wandb
-
-from deepinv.physics import Tomography, Downsampling
-from deepinv.optim.utils import conjugate_gradient
 
 cfg = {
     "lr": 0.1,
@@ -58,8 +54,7 @@ with wandb.init(**wandb_kwargs) as run:
     x = resize(x, (128,128), anti_aliasing=True)
     x = torch.from_numpy(x).unsqueeze(0).unsqueeze(0).float()
 
-    #A = Tomography(angles=cfg["num_angles"], img_width=128) 
-    A = Downsampling(filter="gaussian", img_size=(1,128,128), factor=4)
+    A = Tomography(angles=cfg["num_angles"], img_width=128) 
 
     y = A(x)
     y_noise = y + cfg["rel_noise"]*torch.mean(y.abs())*torch.randn(y.shape)
