@@ -51,8 +51,8 @@ cfg = {
     "inp_noise": 0.05,
     "adam_betas": (0.9, 0.999),
     "tv_reg_max": 0.5,
-    "tv_reg_min": 1e-3, 
-    "lam": 25.0, 
+    "tv_reg_min": 1e-2, 
+    "lam": 60.0, 
 }
 
 wandb_name = f"splitting_dip_{cfg["forward_operator"]}_device={device}"
