@@ -7,7 +7,6 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt 
 import skimage 
-from unet import get_unet_model
 from skimage.transform import resize
 from skimage.metrics import peak_signal_noise_ratio
 from tqdm import tqdm
@@ -16,7 +15,10 @@ from deepinv.physics import Tomography, Downsampling
 
 
 from operator_module import OperatorModule
-from utils import isotropic_tv_loss as tv_loss
+
+from model.unet import get_unet_model
+from model.utils import tv_loss, isotropic_tv_loss
+
 
 device = "cuda"
 
@@ -45,7 +47,7 @@ cfg = {
         "use_sigmoid": False,
         "skip": 16,
         "channels": (32, 64, 128, 128, 256, 256),
-        "activation" : "silu" # "silu"
+        "activation" : "relu" # "silu"
     },
     "model_inp": "fbp", # "random" "fbp"
     "inp_noise": 0.05,
@@ -53,12 +55,16 @@ cfg = {
     "betas": (0.9, 0.999),
     "momentum" : 0.0,
     "weight_decay": 0.0,
-    "tv_reg": 1e-7
+    "tv_reg": 4e-4
+    ,
+    "tv_type": "anisotropic"
 }
 
 wandb_name = f"dip_{cfg["forward_operator"]}_device={device}_{cfg["optimiser"]}"
 if cfg["optimiser"] == "gd" and cfg["momentum"] > 0:
     wandb_name = wandb_name + "+momentum"
+
+wandb_name = wandb_name + f"_tv={cfg["tv_reg"]}"
 
 wandb_kwargs = {
         "project": "deep-image-prior-handbook",
@@ -71,6 +77,9 @@ wandb_kwargs = {
     }
 with wandb.init(**wandb_kwargs) as run:
     
+    if cfg["tv_type"] == "isotropic":
+        tv_loss = isotropic_tv_loss
+
     x = torch.load("walnut.pt")
     
     #x = np.array(skimage.data.shepp_logan_phantom())
