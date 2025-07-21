@@ -11,8 +11,8 @@ from skimage.metrics import peak_signal_noise_ratio
 
 device = "cuda"
 
-num_angles = 90 
-rel_noise = 0.05 
+num_angles = 60 
+rel_noise = 0.1
 
 # From random search:
 # alpha = 3.99
@@ -26,14 +26,34 @@ print("x: ", x.shape)
 
 physics = Tomography(angles=num_angles, img_width=256, device=device) 
 y = physics.A(x)
-y_noise = y + rel_noise*torch.mean(y.abs())*torch.randn_like(y)
-
+g = torch.Generator()
+g.manual_seed(1)
+y_noise = y + rel_noise*torch.mean(y.abs())*torch.randn(y.shape, generator=g).to(device)
 L = physics.compute_norm(torch.rand_like(x))
 print("L: ", L.item())
 
+x_fbp = physics.A_dagger(y_noise)
 
-max_iter = 2000 
-step_size = 0.5 
+fig, (ax1, ax2, ax3) = plt.subplots(1,3, figsize=(18,7))
+
+ax1.imshow(y[0,0,:,:].cpu().numpy())
+ax1.set_title("clean sinogram")
+ax1.axis("off")
+
+ax2.imshow(y_noise[0,0,:,:].cpu().numpy())
+ax2.set_title("noisy sinogram")
+ax2.axis("off")
+
+ax3.imshow(x_fbp[0,0,:,:].cpu().numpy(), cmap="gray")
+ax3.set_title("FBP")
+ax3.axis("off")
+
+plt.show()
+
+
+
+max_iter = 200 
+step_size =  1.335 
 tol = 1e-6
 
 def TV_rec(y, physics, L, x_init, step_size, alpha, max_iter=2000, tol=1e-6):
@@ -66,47 +86,22 @@ def TV_rec(y, physics, L, x_init, step_size, alpha, max_iter=2000, tol=1e-6):
     return xk 
 
 
-# random search 
-alpha_min = 1.
-alpha_max = 15. 
-step_size_min = 0.1 
-step_size_max = 2.0 
 
-n_tries = 10
 
-best_psnr = 0 
-best_alpha = None 
-best_step_size = None 
+alpha = 15.0 
+x_init = torch.zeros_like(x)
+x_rec = TV_rec(y_noise, physics, L, x_init, step_size, alpha, max_iter=max_iter, tol=tol)
 
-for i in range(n_tries):
+psnr = peak_signal_noise_ratio(x[0,0,:,:].cpu().numpy(), x_rec[0,0,:,:].detach().cpu().numpy())
+print(f"Get PSNR = {psnr:.4f}dB")
 
-    alpha = torch.rand(1, device=device) * (alpha_max - alpha_min) + alpha_min
-    step_size = torch.rand(1, device=device) * (step_size_max - step_size_min) + step_size_min
 
-    print(f"Try alpha = {alpha.item():.3f} and step size = {step_size.item():.3f}")
 
-    x_init = torch.zeros_like(x)
-    x_rec = TV_rec(y_noise, physics, L, x_init, step_size, alpha)
-
-    psnr = peak_signal_noise_ratio(x[0,0,:,:].cpu().numpy(), x_rec[0,0,:,:].detach().cpu().numpy())
-    print(f"Get PSNR = {psnr:.4f}dB")
-
-    if psnr > best_psnr:
-        best_psnr = psnr
-        best_alpha = alpha.item()
-        best_step_size = step_size.item()
-
-print("Finished random search. Best: ")
-print("\t PSNR: ", best_psnr)
-print("\t alpha: ", best_alpha)
-print("\t step size: ", best_step_size) 
-
-#print(f"Final PSNR = {psnr_list[-1]:4f} dB")
-#fig, (ax1, ax2, ax3, ax4) = plt.subplots(1,4, figsize=(12,6))
-#ax1.imshow(x[0,0].cpu().numpy(), cmap="gray")
-#ax2.imshow(xk[0,0].cpu().numpy(), cmap="gray")
+fig, (ax1, ax2, ax3, ax4) = plt.subplots(1,4, figsize=(12,6))
+ax1.imshow(x[0,0].cpu().numpy(), cmap="gray")
+ax2.imshow(x_rec[0,0].cpu().numpy(), cmap="gray")
 #ax3.semilogy(res_list)
 #ax3.set_title("Mean Squared Error")
 #ax4.plot(psnr_list)
 #ax4.set_title("PSNR")
-#plt.show()
+plt.show()
