@@ -6,8 +6,9 @@ import numpy as np
 
 def get_unet_model(in_ch=1, out_ch=1, scales=5, skip=4,
                    channels=(32, 32, 64, 64, 128, 128), use_sigmoid=True,
-                   use_norm=True, activation="relu", padding_mode="zeros", 
-                   upsample_mode='nearest'):
+                   use_norm=True, activation="relu", padding_mode="circular", 
+                   upsample_mode='nearest', initialisation="xavier_uniform",
+                   init_last_conv_zero=False):
     assert activation in ["relu", "silu","leaky_relu"], "Activation function has bo the either ReLU, SiLU LeakyReLU"
     assert (1 <= scales <= 6)
     if isinstance(skip, int):
@@ -21,7 +22,8 @@ def get_unet_model(in_ch=1, out_ch=1, scales=5, skip=4,
     return UNet(in_ch=in_ch, out_ch=out_ch, channels=channels[:scales],
                 skip_channels=skip_channels, use_sigmoid=use_sigmoid,
                 use_norm=use_norm, activation=activation,padding_mode=padding_mode, 
-                upsample_mode=upsample_mode)
+                upsample_mode=upsample_mode, initialisation=initialisation,
+                init_last_conv_zero=init_last_conv_zero)
 
 
 
@@ -29,8 +31,8 @@ class UNet(nn.Module):
 
     def __init__(self, in_ch, out_ch, channels, skip_channels,
                  use_sigmoid=True, use_norm=True, activation="relu", 
-                 padding_mode="zeros", upsample_mode='nearest'
-                 ):
+                 padding_mode="circular", upsample_mode='nearest',
+                 initialisation="xavier_uniform", init_last_conv_zero=False):
         super(UNet, self).__init__()
         assert (len(channels) == len(skip_channels))
         assert activation in ["relu", "silu", "leaky_relu"], "Activation function has bo the either ReLU, SiLU LeakyReLU"
@@ -38,7 +40,7 @@ class UNet(nn.Module):
         self.scales = len(channels)
         self.use_sigmoid = use_sigmoid
         self.activation_type = activation
-
+        self.initialisation = initialisation
         if activation == "relu":
             self.activation = nn.ReLU()
         elif activation == "silu":
@@ -68,6 +70,33 @@ class UNet(nn.Module):
         self.outc = OutBlock(in_ch=channels[0],
                              out_ch=out_ch, 
                              padding_mode=padding_mode)
+        self._init_weights()
+        
+        if init_last_conv_zero:
+            torch.nn.init.zeros_(self.outc.conv.weight)
+        
+
+    def _init_weights(self):
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                if self.initialisation == "xavier_uniform":
+                    nn.init.xavier_uniform_(m.weight)
+                elif self.initialisation == "xavier_normal":
+                    nn.init.xavier_normal_(m.weight)
+                elif self.initialisation == "kaiming_normal":
+                    if self.activation_type == "leaky_relu":
+                        nn.init.kaiming_normal_(m.weight, mode='fan_in', nonlinearity='leaky_relu', a=0.2)
+                    else:   
+                        nn.init.kaiming_normal_(m.weight, mode='fan_in', nonlinearity=self.activation_type)
+                elif self.initialisation == "kaiming_uniform":
+                    if self.activation_type == "leaky_relu":
+                        nn.init.kaiming_uniform_(m.weight, mode='fan_in', nonlinearity='leaky_relu', a=0.2)
+                    else:   
+                        nn.init.kaiming_uniform_(m.weight, mode='fan_in', nonlinearity=self.activation_type)
+                else:
+                    raise NotImplementedError(f"Initialisation {self.initialisation} not implemented")
+                if m.bias is not None:
+                    nn.init.zeros_(m.bias)
 
     def forward(self, x0):
         xs = [self.inc(x0), ]
@@ -153,6 +182,7 @@ class UpBlock(nn.Module):
             skip_ch = 1
         if use_norm:
             self.conv = nn.Sequential(
+                nn.GroupNorm(num_channels=in_ch + skip_ch,  num_groups=1),
                 nn.Conv2d(in_ch + skip_ch, out_ch, kernel_size, stride=1,
                           padding=to_pad, padding_mode=padding_mode),
                 nn.GroupNorm(num_channels=out_ch, num_groups=4),
