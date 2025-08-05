@@ -221,7 +221,7 @@ for i in tqdm(range(cfg_dip["num_steps"])):
         data_loss = torch.sum((ray_trafo.trafo(x_pred) - y_noise)**2/L**2)
         denoise_loss = torch.sum((x_pred - z) ** 2)
         loss = data_loss + cfg_dip["lambda_denoise"] * loss_scaling * denoise_loss
-        print("data_loss: ", data_loss.item(), "denoise_loss: ", denoise_loss.item(), "loss: ", loss.item())
+        #print("data_loss: ", data_loss.item(), "denoise_loss: ", denoise_loss.item(), "loss: ", loss.item())
         loss.backward()
 
         #torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
