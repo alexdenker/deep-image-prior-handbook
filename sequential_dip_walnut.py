@@ -22,13 +22,13 @@ from tqdm import tqdm
 from skimage.metrics import peak_signal_noise_ratio
 from PIL import Image
 import yaml 
-from types import SimpleNamespace
 
 
 from dataset.walnut import get_walnut_data
 from dataset.walnut_2d_ray_trafo import get_walnut_2d_ray_trafo
 
 from model.unet import get_unet_model
+from utils import dict_to_namespace
 
 cfg_dip = {"model_inp": "adjoint", # "fbp", "adjoint" 
        "model_type": "unet", 
@@ -92,13 +92,7 @@ else:
 
 device = "cuda"
 
-def dict_to_namespace(d):
-    if isinstance(d, dict):
-        return SimpleNamespace(**{k: dict_to_namespace(v) for k, v in d.items()})
-    elif isinstance(d, list):
-        return [dict_to_namespace(i) for i in d]
-    else:
-        return d
+
     
 cfg_dict = {}
 with open('configs/walnut_config.yaml', 'r') as f:
