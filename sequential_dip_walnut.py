@@ -145,7 +145,7 @@ img = img.astype(np.uint8)
 Image.fromarray(img).save(paths['imgs'] /"groundtruth.png")
 
 x_test = torch.rand_like(x).view(-1, 1)
-L = power_iteration(x_test, ray_trafo, max_iter=100, verbose=True, tol=1e-6)
+L = power_iteration(ray_trafo, x_test, max_iter=100, verbose=True, tol=1e-6)
 
 logger.info(f"L: {L}. number of parameters: {sum([p.numel() for p in model.parameters()])}")
 if cfg_dip["model_input"] == "fbp":

@@ -4,7 +4,7 @@ import torch
 from tqdm import tqdm
 from skimage.metrics import peak_signal_noise_ratio
 import matplotlib 
-matplotlib.use("Agg")
+#matplotlib.use("Agg")
 import matplotlib.pyplot as plt 
 import numpy as np
 import random
@@ -14,35 +14,34 @@ from tqdm import tqdm
 from skimage.metrics import peak_signal_noise_ratio
 from PIL import Image
 import yaml 
-from types import SimpleNamespace
 
 
 from dataset.walnut import get_walnut_data
 from dataset.walnut_2d_ray_trafo import get_walnut_2d_ray_trafo
 
 from model.unet import get_unet_model
+from utils import dict_to_namespace
 
-cfg_dip = {"model_inp": "random", # "fbp", "random"
+cfg_dip = {"model_inp": "fbp", # "fbp", "random"
        "model_type": "unet", 
-       "channels": (256,256,256,256,256,256), # 6 scales
+       "channels": [128, 128, 128, 128, 128, 128], # 6 scales
        "scales": 6,
-       "skip": 0,
+       "skip": [0, 0, 0, 0, 0, 0],
        "activation": "leaky_relu", # "relu", "silu", "leakyrelu
-       "padding_mode": "circular", # "circular", "zeros"
+       "padding_mode": "zeros", # "circular", "zeros"
        "upsample_mode": "nearest", # "nearest", "bilinear"
        "use_norm": True,
        "use_sigmoid": True, 
        "random_seed": 1, 
        "random_seed_noise": 2,
-       "initialisation": "kaiming_uniform", # kaiming_uniform, kaiming_normal, xavier_uniform, xavier_normal
        "num_steps": 10000,
        "lr": 2e-4,
        "psnr_tv": 26.88} 
 
-save_dir = f"dip_results/vanilla/{cfg_dip["model_inp"]}/{cfg_dip["initialisation"]}"
+save_dir = f"dip_results/vanilla/{cfg_dip["model_inp"]}"
 os.makedirs(save_dir, exist_ok=True)
 
-save_dir_img = f"dip_results/vanilla/{cfg_dip["model_inp"]}/{cfg_dip["initialisation"]}/imgs"
+save_dir_img = f"dip_results/vanilla/{cfg_dip["model_inp"]}/imgs"
 os.makedirs(save_dir_img, exist_ok=True)
 
 def create_circular_mask(size):
@@ -76,8 +75,7 @@ if cfg_dip["model_type"] == "unet":
                            use_norm=cfg_dip["use_norm"],
                            activation=cfg_dip["activation"],
                            padding_mode=cfg_dip["padding_mode"],
-                           upsample_mode=cfg_dip["upsample_mode"],
-                           initialisation=cfg_dip["initialisation"])        
+                           upsample_mode=cfg_dip["upsample_mode"])   
     model.to(device)
     model.train()
 else:
@@ -85,13 +83,7 @@ else:
 
 device = "cuda"
 
-def dict_to_namespace(d):
-    if isinstance(d, dict):
-        return SimpleNamespace(**{k: dict_to_namespace(v) for k, v in d.items()})
-    elif isinstance(d, list):
-        return [dict_to_namespace(i) for i in d]
-    else:
-        return d
+
     
 cfg_dict = {}
 with open('configs/walnut_config.yaml', 'r') as f:
@@ -165,7 +157,7 @@ if cfg_dip["model_inp"] == "fbp":
 else:
     g = torch.Generator()
     g.manual_seed(cfg_dip["random_seed_noise"])
-    z = torch.randn(x.shape, generator=g)
+    z = 0.1*torch.randn(x.shape, generator=g)
 
 noise_std = 0.0
 
@@ -174,11 +166,16 @@ y_noise = y.to(device)
 
 #torch.save(z, "dip_inp.pt")
 
+#plt.figure()
+#plt.imshow(z[0,0].cpu().numpy())
+#plt.show()
+
+model.eval()
 with torch.no_grad():
     x_pred = model(z)
 
 
-optim = torch.optim.Adam(model.parameters(), lr=cfg_dip["lr"], eps=1e-4,betas=(0.9,0.99), amsgrad=True) #, eps=1e-4, amsgrad = True, betas=(0.9,0.99))
+optim = torch.optim.Adam(model.parameters(), lr=cfg_dip["lr"])#,amsgrad=True, betas=(0.9,0.99)) #, eps=1e-4,betas=(0.9,0.99), amsgrad=True) #, eps=1e-4, amsgrad = True, betas=(0.9,0.99))
 #optim = torch.optim.SGD(model.parameters(), lr=5e-4)
 
 
@@ -198,6 +195,7 @@ best_psnr = 0
 best_psnr_idx = 0 
 best_psnr_image = None 
 
+model.train()
 for i in tqdm(range(cfg_dip["num_steps"])):
     optim.zero_grad()
 

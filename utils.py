@@ -9,7 +9,25 @@ try:
 except ImportError:
     wandb = None
 
+def dict_to_namespace(d):
+    if isinstance(d, dict):
+        return SimpleNamespace(**{k: dict_to_namespace(v) for k, v in d.items()})
+    elif isinstance(d, list):
+        return [dict_to_namespace(i) for i in d]
+    else:
+        return d
+    
+
 def create_circular_mask(size):
+    """
+    The output of this function is a torch tensor of size (size, size) with binary values:
+        1: point is inside a circle of radius size/2
+        0: point is outside a circle of radius size/2
+
+    This method is used to only calculate the quality metrics inside of the circle.  
+    
+    """
+
     H, W = size
     Y, X = torch.meshgrid(torch.arange(H), torch.arange(W), indexing='ij')
     center = (H // 2, W // 2)
@@ -19,15 +37,11 @@ def create_circular_mask(size):
     mask = (dist <= radius**2)
     return mask  # shape: (501, 501), values: 0 or 1
 
-def dict_to_namespace(d):
-    if isinstance(d, dict):
-        return SimpleNamespace(**{k: dict_to_namespace(v) for k, v in d.items()})
-    elif isinstance(d, list):
-        return [dict_to_namespace(i) for i in d]
-    else:
-        return d
+def power_iteration(ray_trafo, x0, max_iter=100,verbose=True, tol=1e-6):
+    """
+    Estimate the Lipschitz constant of the ray_trafo
     
-def power_iteration(x0, ray_trafo, max_iter=100, verbose=True, tol=1e-6):
+    """
     x = torch.randn_like(x0)
     x /= torch.norm(x)
     zold = torch.zeros_like(x)
@@ -44,7 +58,6 @@ def power_iteration(x0, ray_trafo, max_iter=100, verbose=True, tol=1e-6):
             break
         zold = z
         x = y / torch.norm(y)
-
     return z.real
 
 
@@ -186,4 +199,3 @@ class MaskedPSNR:
 
         data_range = x_masked.max()  # Can also use x_masked.max() - x_masked.min() if needed
         return peak_signal_noise_ratio(x_masked, x_pred_masked, data_range=data_range)
-
