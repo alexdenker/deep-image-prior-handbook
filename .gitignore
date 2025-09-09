@@ -3,6 +3,9 @@
 data/Walnut1/
 wandb/
 
+*.png
+*.jpg
+*.jpg
 *.pyc
 *.mat
 
