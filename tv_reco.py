@@ -1,62 +1,55 @@
+import yaml 
+from types import SimpleNamespace
 
 import torch
-
 import matplotlib.pyplot as plt 
 from tqdm import tqdm
 
 import deepinv as dinv 
-from deepinv.physics import Tomography
 from skimage.metrics import peak_signal_noise_ratio
 
+from dip import get_walnut_data, get_walnut_2d_ray_trafo, create_circular_mask, dict_to_namespace, power_iteration
 
 device = "cuda"
 
-num_angles = 60 
-rel_noise = 0.1
 
-# From random search:
-# alpha = 3.99
-# step size = 1.335 
-# PSNR = 30.34 dB 
+mask = create_circular_mask((501, 501))
 
-x = torch.load("walnut.pt")
-x = x.float().to(device)
+cfg_dict = {}
+with open('configs/walnut_config.yaml', 'r') as f:
+    data = yaml.safe_load(f)
+    cfg_dict["data"] = data
 
-print("x: ", x.shape)
+cfg = dict_to_namespace(cfg_dict)
+cfg.device = device
 
-physics = Tomography(angles=num_angles, img_width=256, device=device) 
-y = physics.A(x)
-g = torch.Generator()
-g.manual_seed(1)
-y_noise = y + rel_noise*torch.mean(y.abs())*torch.randn(y.shape, generator=g).to(device)
-L = physics.compute_norm(torch.rand_like(x))
-print("L: ", L.item())
+ray_trafo = get_walnut_2d_ray_trafo(
+    data_path=cfg.data.data_path,
+    matrix_path=cfg.data.data_path,
+    walnut_id=cfg.data.walnut_id,
+    orbit_id=cfg.data.orbit_id,
+    angular_sub_sampling=cfg.data.angular_sub_sampling,
+    proj_col_sub_sampling=cfg.data.proj_col_sub_sampling)
+ray_trafo.to(device)
+data = get_walnut_data(cfg, ray_trafo=ray_trafo)
 
-x_fbp = physics.A_dagger(y_noise)
+y, x, xfbp = data[0]
+#y = y[0,0,0,:].unsqueeze(-1)
+im_size = x.shape[-1]
+print(y.shape, x.shape, xfbp.shape)
 
-fig, (ax1, ax2, ax3) = plt.subplots(1,3, figsize=(18,7))
+x_test = torch.rand_like(x).view(-1, 1)
+print("x_test: ", x_test.shape)
 
-ax1.imshow(y[0,0,:,:].cpu().numpy())
-ax1.set_title("clean sinogram")
-ax1.axis("off")
-
-ax2.imshow(y_noise[0,0,:,:].cpu().numpy())
-ax2.set_title("noisy sinogram")
-ax2.axis("off")
-
-ax3.imshow(x_fbp[0,0,:,:].cpu().numpy(), cmap="gray")
-ax3.set_title("FBP")
-ax3.axis("off")
-
-plt.show()
+L = power_iteration(ray_trafo, x_test)
+print("L: ", L)
 
 
-
-max_iter = 200 
-step_size =  1.335 
+max_iter = 1000 
+step_size =  1.0
 tol = 1e-6
 
-def TV_rec(y, physics, L, x_init, step_size, alpha, max_iter=2000, tol=1e-6):
+def TV_rec(y, L, x_init, step_size, alpha, max_iter=2000, tol=1e-6):
     xk = torch.clone(x_init)
     x_prev = torch.clone(xk)
 
@@ -69,9 +62,10 @@ def TV_rec(y, physics, L, x_init, step_size, alpha, max_iter=2000, tol=1e-6):
         ak = (tk -1) / tk_new
 
         xk_tilde = xk + ak * (xk - x_prev)
-
-        res = physics.A(xk_tilde)  - y_noise 
-        x_next = xk_tilde - step_size/L * physics.A_adjoint(res)
+        
+        Ax = ray_trafo.trafo(xk_tilde)
+        res =  Ax - y 
+        x_next = xk_tilde - step_size/L * ray_trafo.trafo_adjoint(res)
         x_next = prior.prox(x_next, gamma=step_size/L*alpha)
         x_next[x_next < 0] = 0.
         x_next[x_next > 1] = 1.
@@ -88,20 +82,18 @@ def TV_rec(y, physics, L, x_init, step_size, alpha, max_iter=2000, tol=1e-6):
 
 
 
-alpha = 15.0 
+alpha = 0.1
 x_init = torch.zeros_like(x)
-x_rec = TV_rec(y_noise, physics, L, x_init, step_size, alpha, max_iter=max_iter, tol=tol)
+x_rec = TV_rec(y, L, x_init, step_size, alpha, max_iter=max_iter, tol=tol)
 
-psnr = peak_signal_noise_ratio(x[0,0,:,:].cpu().numpy(), x_rec[0,0,:,:].detach().cpu().numpy())
+psnr = peak_signal_noise_ratio(x[0,0,mask].cpu().numpy(), x_rec[0,0,mask].detach().cpu().numpy(), data_range=x[0,0,mask].cpu().numpy().max())
 print(f"Get PSNR = {psnr:.4f}dB")
 
 
 
-fig, (ax1, ax2, ax3, ax4) = plt.subplots(1,4, figsize=(12,6))
-ax1.imshow(x[0,0].cpu().numpy(), cmap="gray")
-ax2.imshow(x_rec[0,0].cpu().numpy(), cmap="gray")
-#ax3.semilogy(res_list)
-#ax3.set_title("Mean Squared Error")
-#ax4.plot(psnr_list)
-#ax4.set_title("PSNR")
+fig, (ax1, ax2, ax3) = plt.subplots(1,3, figsize=(12,6))
+ax1.imshow(x[0,0].cpu().numpy(), cmap="gray", interpolation=None)
+ax2.imshow(x_rec[0,0].cpu().numpy(), cmap="gray", interpolation=None)
+ax3.imshow(xfbp[0,0].cpu().numpy(),cmap="gray", interpolation=None)
+
 plt.show()
