@@ -6,6 +6,7 @@ from PIL import Image
 from skimage.metrics import peak_signal_noise_ratio
 
 from .utils import create_circular_mask
+from ..logging import FlexibleLogger
 
 class DeepImagePrior():
     def __init__(self, model, lr, num_steps, noise_std, L=1.0, callbacks=None):
@@ -26,6 +27,8 @@ class DeepImagePrior():
         x_in: input to DIP
         
         """
+
+        logger = FlexibleLogger(use_wandb=False)
 
         mask = create_circular_mask((501, 501))
 
@@ -54,7 +57,7 @@ class DeepImagePrior():
             optim.step() 
 
             #self.callbacks()
-
+            logger.log({"MSE": loss.item()}, step=i)
             loss_list.append(loss.item())
             if x_gt is not None:
                 psnr_list.append(peak_signal_noise_ratio(x_gt[0,0,mask].cpu().numpy(), 
@@ -71,6 +74,8 @@ class DeepImagePrior():
         self.model.eval()
         with torch.no_grad():
             x_out = self.model(x_in)
+
+        logger.finish()
 
         if return_metrics:
             return x_out, psnr_list, loss_list, best_psnr_image, best_psnr_idx

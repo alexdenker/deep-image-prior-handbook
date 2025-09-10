@@ -52,7 +52,29 @@ parser.add_argument("--device",
                     type=str,
                     default="cuda")
 
-parser.add_argument("--only_fitting", type=str, default=False)
+base_args, remaining = parser.parse_known_args()
+
+if base_args.method == "tv_hqs":
+    parser.add_argument("--splitting_strength", 
+                        type=float, 
+                        default=60.)
+    parser.add_argument("--tv_min", 
+                        type=float, 
+                        default=0.5)
+    parser.add_argument("--tv_max", 
+                        type=float,
+                        default=1e-2)
+    parser.add_argument("--inner_steps", 
+                        type=int, 
+                        default=10)
+
+elif base_args.method == "tv":
+    parser.add_argument("--tv_strength", 
+                        type=float,
+                        default=1e-5)
+else:
+    pass 
+
 args = parser.parse_args()
 
 
@@ -152,10 +174,10 @@ elif args.method == "tv_hqs":
                          lr=args.lr, 
                          num_steps=args.num_steps, 
                          noise_std=args.noise_std, 
-                         splitting_strength=60., 
-                         tv_min=0.5, 
-                         tv_max=1e-2, 
-                         inner_steps=10,
+                         splitting_strength=args.splitting_strength, 
+                         tv_min=args.tv_min, 
+                         tv_max=args.tv_max, 
+                         inner_steps=args.inner_steps,
                          L=L)
 
     x_pred, psnr_list, loss_list, best_psnr_image, best_psnr_idx = dip.train(ray_trafo, y, z)
@@ -165,7 +187,7 @@ elif args.method == "tv":
                          lr=args.lr, 
                          num_steps=args.num_steps, 
                          noise_std=args.noise_std, 
-                         tv_strength=1e-5,
+                         tv_strength=args.tv_strength,
                          L=L)
 
     x_pred, psnr_list, loss_list, best_psnr_image, best_psnr_idx = dip.train(ray_trafo, y, z)
