@@ -8,33 +8,13 @@ from tqdm import tqdm
 import deepinv as dinv 
 from skimage.metrics import peak_signal_noise_ratio
 
-from dataset.walnut import get_walnut_data
-from dataset.walnut_2d_ray_trafo import get_walnut_2d_ray_trafo
+from dip import get_walnut_data, get_walnut_2d_ray_trafo, create_ciruclar_mask, dict_to_namespace, power_iteration
 
 device = "cuda"
 
 
+mask = create_ciruclar_mask(501)
 
-def create_circular_mask(size):
-    H, W = size
-    Y, X = torch.meshgrid(torch.arange(H), torch.arange(W), indexing='ij')
-    center = (H // 2, W // 2)
-    radius = min(center[0], center[1])
-
-    dist = (X - center[1])**2 + (Y - center[0])**2
-    mask = (dist <= radius**2)
-    return mask  # shape: (501, 501), values: 0 or 1
-
-mask = create_circular_mask((501, 501))
-
-def dict_to_namespace(d):
-    if isinstance(d, dict):
-        return SimpleNamespace(**{k: dict_to_namespace(v) for k, v in d.items()})
-    elif isinstance(d, list):
-        return [dict_to_namespace(i) for i in d]
-    else:
-        return d
-    
 cfg_dict = {}
 with open('configs/walnut_config.yaml', 'r') as f:
     data = yaml.safe_load(f)
@@ -60,27 +40,8 @@ print(y.shape, x.shape, xfbp.shape)
 
 x_test = torch.rand_like(x).view(-1, 1)
 print("x_test: ", x_test.shape)
-def power_iteration(x0, max_iter=100,verbose=True, tol=1e-6):
-    x = torch.randn_like(x0)
-    x /= torch.norm(x)
-    zold = torch.zeros_like(x)
-    for it in range(max_iter):
-        y = ray_trafo.trafo_flat(x)
-        y = ray_trafo.trafo_adjoint_flat(y)
-        z = torch.matmul(x.conj().reshape(-1), y.reshape(-1)) / torch.norm(x) ** 2
 
-        rel_var = torch.norm(z - zold)
-        if rel_var < tol and verbose:
-            print(
-                f"Power iteration converged at iteration {it}, value={z.item():.2f}"
-            )
-            break
-        zold = z
-        x = y / torch.norm(y)
-
-    return z.real
-
-L = power_iteration(x_test)
+L = power_iteration(ray_trafo, x_test)
 print("L: ", L)
 
 
