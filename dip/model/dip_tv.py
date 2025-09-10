@@ -2,26 +2,20 @@ import torch
 import numpy as np 
 from tqdm import tqdm 
 from skimage.metrics import peak_signal_noise_ratio
-
-from .utils import create_circular_mask, tv_loss
-
 import deepinv as dinv 
 
+from .utils import create_circular_mask, tv_loss
+from .base_dip import BaseDeepImagePrior
 
-class DeepImagePriorHQS():
+
+class DeepImagePriorHQS(BaseDeepImagePrior):
     def __init__(self, model, lr, num_steps, splitting_strength, tv_min, tv_max, inner_steps, noise_std=0.0, L=1.0, callbacks=None):
-        self.model = model 
+        super().__init__(model, lr, num_steps, noise_std, L, callbacks)
 
-        self.lr = lr
-        self.num_steps = num_steps
-        self.noise_std = noise_std # add additional random noise to input 
-        self.L = L # estimate of the Lipschitz constant of the forward operator 
         self.splitting_strength = splitting_strength
         self.tv_min = tv_min 
         self.tv_max = tv_max
         self.inner_steps = inner_steps
-
-        #self.callbacks = ...
 
     def train(self, ray_trafo, y, x_in, x_gt=None, return_metrics=True):
         """
