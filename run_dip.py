@@ -9,7 +9,8 @@ import random
 from PIL import Image
 import argparse 
 
-from dip import DeepImagePrior, get_unet_model, get_walnut_data, get_walnut_2d_ray_trafo, dict_to_namespace, power_iteration, DeepImagePriorHQS
+from dip import (DeepImagePrior, get_unet_model, get_walnut_data, get_walnut_2d_ray_trafo, 
+                dict_to_namespace, power_iteration, DeepImagePriorHQS, DeepImagePriorTV)
 
 
 parser = argparse.ArgumentParser(description="Run DIP")
@@ -158,8 +159,16 @@ elif args.method == "tv_hqs":
                          L=L)
 
     x_pred, psnr_list, loss_list, best_psnr_image, best_psnr_idx = dip.train(ray_trafo, y, z)
+elif args.method == "tv":
+    DeepImagePriorTV
+    dip = DeepImagePriorTV(model=model, 
+                         lr=args.lr, 
+                         num_steps=args.num_steps, 
+                         noise_std=args.noise_std, 
+                         tv_strength=1e-5,
+                         L=L)
 
-
+    x_pred, psnr_list, loss_list, best_psnr_image, best_psnr_idx = dip.train(ray_trafo, y, z)
     
 else:
     raise NotImplementedError
