@@ -1,5 +1,4 @@
 import torch
-from types import SimpleNamespace
 import logging
 from typing import Optional
 from pathlib import Path
