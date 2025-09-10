@@ -1,4 +1,4 @@
-from dataset.walnut_utils import save_single_slice_ray_trafo_matrix
+from dip import save_single_slice_ray_trafo_matrix
 
 ANGULAR_SUB_SAMPLING = 20  # 1200 -> 60
 PROJ_COL_SUB_SAMPLING = 6  # 768 -> 128
