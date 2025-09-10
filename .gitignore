@@ -3,10 +3,11 @@
 data/Walnut1/
 wandb/
 
+*.pdf
 *.png
-*.jpg
+*.jpeg
 *.jpg
 *.pyc
 *.mat
-
+dip_results/
 .ipynb_checkpoints/

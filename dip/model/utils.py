@@ -114,3 +114,31 @@ def create_circular_mask(size):
     dist = (X - center[1])**2 + (Y - center[0])**2
     mask = (dist <= radius**2)
     return mask  # shape: (501, 501), values: 0 or 1
+
+class MaskedPSNR:
+    def __init__(self, im_size, mask_fn=None):
+        """
+        Args:
+            im_size (int): The image size (assumes square images).
+            mask_fn (callable): A function that returns a boolean mask array.
+        """
+        self.im_size = im_size
+        if mask_fn is None:
+            mask_fn = create_circular_mask
+        self.mask = mask_fn((im_size, im_size))
+
+    def __call__(self, x, x_pred):
+        """
+        Args:
+            x (torch.Tensor): Ground truth image tensor, shape (B, C, H, W)
+            x_pred (torch.Tensor): Predicted image tensor, same shape as x
+
+        Returns:
+            float: PSNR computed only within the masked region
+        """
+        # Use the first image and first channel (assumes grayscale)
+        x_masked = x[0, 0, self.mask].detach().cpu().numpy()
+        x_pred_masked = x_pred[0, 0, self.mask].detach().cpu().numpy()
+
+        data_range = x_masked.max()  # Can also use x_masked.max() - x_masked.min() if needed
+        return peak_signal_noise_ratio(x_masked, x_pred_masked, data_range=data_range)
