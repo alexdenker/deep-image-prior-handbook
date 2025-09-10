@@ -10,4 +10,5 @@ from .walnut import (
     get_walnut_data,
 )
 from .walnut_utils import get_single_slice_ray_trafo, get_single_slice_ray_trafo_matrix
+from .walnut_2d_ray_trafo import get_walnut_2d_ray_trafo
 

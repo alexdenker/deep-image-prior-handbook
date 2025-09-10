@@ -1,36 +1,23 @@
 import yaml 
-
-
 import os 
-
 import torch
-from tqdm import tqdm
-from skimage.metrics import peak_signal_noise_ratio
 import matplotlib 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt 
 import numpy as np
 import random
-
-from tqdm import tqdm
-
 from PIL import Image
-import yaml 
-
-from dataset.walnut import get_walnut_data
-from dataset.walnut_2d_ray_trafo import get_walnut_2d_ray_trafo
-
-from model.unet import get_unet_model
-from utils import dict_to_namespace, create_circular_mask, power_iteration
-from dip import DeepImagePrior
-
 import argparse 
+
+from dip import DeepImagePrior, get_unet_model, get_walnut_data, get_walnut_2d_ray_trafo, dict_to_namespace, power_iteration, DeepImagePriorHQS
+
 
 parser = argparse.ArgumentParser(description="Run DIP")
 
 parser.add_argument("--method",
                     type=str,
-                    default="vanilla")
+                    default="vanilla", 
+                    choices=["vanilla", "tv_hqs", "tv"])
 
 parser.add_argument("--model_inp", 
                     type=str, 
@@ -90,7 +77,7 @@ torch.use_deterministic_algorithms(True)
 model_dict = {}
 with open('configs/dip_architecture.yaml', 'r') as f:
     model_dict = yaml.safe_load(f)
-
+    model_dict = dict_to_namespace(model_dict)
 print(model_dict)
 
 model = get_unet_model(in_ch=1, out_ch=1, scales=model_dict.scales,
@@ -159,6 +146,21 @@ if args.method == "vanilla":
                          L=L)
     
     x_pred, psnr_list, loss_list, best_psnr_image, best_psnr_idx = dip.train(ray_trafo, y, z)
+elif args.method == "tv_hqs":
+    dip = DeepImagePriorHQS(model=model, 
+                         lr=args.lr, 
+                         num_steps=args.num_steps, 
+                         noise_std=args.noise_std, 
+                         splitting_strength=60., 
+                         tv_min=0.5, 
+                         tv_max=1e-2, 
+                         inner_steps=10,
+                         L=L)
+
+    x_pred, psnr_list, loss_list, best_psnr_image, best_psnr_idx = dip.train(ray_trafo, y, z)
+
+
+    
 else:
     raise NotImplementedError
 

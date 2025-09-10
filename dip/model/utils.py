@@ -93,3 +93,24 @@ def get_scale_modules(ch_in, ch_out, mean_in=0., mean_out=0., std_in=1.,
     scale_in = ScaleModule(ch_in, mean_in, std_in)
     scale_out = ScaleModule(ch_out, -mean_out, 1./std_out)
     return scale_in, scale_out
+
+
+
+def create_circular_mask(size):
+    """
+    The output of this function is a torch tensor of size (size, size) with binary values:
+        1: point is inside a circle of radius size/2
+        0: point is outside a circle of radius size/2
+
+    This method is used to only calculate the quality metrics inside of the circle.  
+    
+    """
+
+    H, W = size
+    Y, X = torch.meshgrid(torch.arange(H), torch.arange(W), indexing='ij')
+    center = (H // 2, W // 2)
+    radius = min(center[0], center[1])
+
+    dist = (X - center[1])**2 + (Y - center[0])**2
+    mask = (dist <= radius**2)
+    return mask  # shape: (501, 501), values: 0 or 1
