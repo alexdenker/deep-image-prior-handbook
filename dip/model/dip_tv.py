@@ -48,10 +48,6 @@ class DeepImagePriorHQS(BaseDeepImagePrior):
         psnr_list = [] 
         loss_list = [] 
 
-        best_psnr = 0 
-        best_psnr_idx = 0 
-        best_psnr_image = None 
-
         x_splitting = torch.zeros_like(x_in)
         tv_reg = np.logspace(np.log10(self.tv_min), np.log10(self.tv_max), self.num_steps)[::-1]
 
@@ -91,17 +87,15 @@ class DeepImagePriorHQS(BaseDeepImagePrior):
             else:
                 psnr_list.append(0)
 
-            if psnr_list[-1] > best_psnr:
-                best_psnr = psnr_list[-1]
-                best_psnr_idx = i 
-                best_psnr_image = torch.clone(x_pred.detach().cpu()).numpy()
+            for cb in self.callbacks:
+                cb(i, x_pred, loss, mse_loss, psnr_list[-1])
 
         self.model.eval()
         with torch.no_grad():
             x_out = self.model(x_in)
 
         if return_metrics:
-            return x_out, psnr_list, loss_list, best_psnr_image, best_psnr_idx
+            return x_out, psnr_list, loss_list
         else:
             return x_out
 
