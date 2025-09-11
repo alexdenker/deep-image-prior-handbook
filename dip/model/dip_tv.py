@@ -4,7 +4,7 @@ from tqdm import tqdm
 from skimage.metrics import peak_signal_noise_ratio
 import deepinv as dinv 
 
-from .utils import create_circular_mask, tv_loss
+from .utils import MaskedPSNR, tv_loss
 from .base_dip import BaseDeepImagePrior
 from ..physics import power_iteration
 
@@ -43,8 +43,6 @@ class DeepImagePriorHQS(BaseDeepImagePrior):
 
         prior = dinv.optim.prior.TVPrior(n_it_max=100)
 
-        mask = create_circular_mask((501, 501))
-
         optim = torch.optim.Adam(self.model.parameters(), lr=self.lr)
                 
         psnr_list = [] 
@@ -59,6 +57,8 @@ class DeepImagePriorHQS(BaseDeepImagePrior):
 
         with torch.no_grad():
             L = power_iteration(ray_trafo, torch.rand_like(x_in))
+
+        psnr_fun = MaskedPSNR((x_in.shape[2], x_in.shape[3]))
 
         self.model.train()
         for i in tqdm(range(self.num_steps // self.inner_steps)):
@@ -85,13 +85,9 @@ class DeepImagePriorHQS(BaseDeepImagePrior):
                 x_pred = self.model(x_in)
                 x_splitting = prior.prox(x_pred, gamma=tv_reg[i])
 
-            #self.callbacks()
-
             
             if x_gt is not None:
-                psnr_list.append(peak_signal_noise_ratio(x_gt[0,0,mask].cpu().numpy(), 
-                                                         x_pred[0,0,mask].detach().cpu().numpy(), 
-                                                         data_range=x_gt[0,0,mask].cpu().numpy().max()))
+                psnr_list.append(psnr_fun(x_gt, x_pred))
             else:
                 psnr_list.append(0)
 

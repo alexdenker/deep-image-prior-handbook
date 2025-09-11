@@ -1,8 +1,7 @@
 import torch 
 from tqdm import tqdm 
-from skimage.metrics import peak_signal_noise_ratio
 
-from .utils import create_circular_mask
+from .utils import MaskedPSNR
 from ..logging import FlexibleLogger
 from ..physics import power_iteration
 
@@ -24,11 +23,12 @@ class BaseDeepImagePrior():
 
     def train(self, ray_trafo, y, x_in, x_gt=None, return_metrics=True, **kwargs):
         logger = FlexibleLogger(use_wandb=False)
-        mask = create_circular_mask((501, 501))
         optim = torch.optim.Adam(self.model.parameters(), lr=self.lr)
         psnr_list, loss_list = [], []
         with torch.no_grad():
             L = power_iteration(ray_trafo, torch.rand_like(x_in))
+
+        psnr_fun = MaskedPSNR((x_in.shape[2], x_in.shape[3]))
 
         self.model.train()
         for i in tqdm(range(self.num_steps)):
@@ -43,11 +43,7 @@ class BaseDeepImagePrior():
             loss_list.append(mse_loss.item())
 
             if x_gt is not None:
-                psnr = peak_signal_noise_ratio(
-                    x_gt[0,0,mask].cpu().numpy(),
-                    x_pred[0,0,mask].detach().cpu().numpy(),
-                    data_range=x_gt[0,0,mask].cpu().numpy().max()
-                )
+                psnr = psnr_fun(x_gt, x_pred)
                 psnr_list.append(psnr)
             else:
                 psnr_list.append(0)
