@@ -54,7 +54,7 @@ class DeepImagePriorHQS(BaseDeepImagePrior):
         with torch.no_grad():
             L = power_iteration(ray_trafo, torch.rand_like(x_in).view(-1, 1))
 
-        psnr_fun = MaskedPSNR((x_in.shape[2], x_in.shape[3]))
+        psnr_fun = MaskedPSNR(x_in.shape[2])
 
         self.model.train()
         for i in tqdm(range(self.num_steps // self.inner_steps)):
