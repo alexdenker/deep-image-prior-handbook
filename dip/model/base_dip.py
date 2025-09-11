@@ -25,6 +25,7 @@ class BaseDeepImagePrior():
         logger = FlexibleLogger(use_wandb=False)
         optim = torch.optim.Adam(self.model.parameters(), lr=self.lr)
         psnr_list, loss_list = [], []
+        
         with torch.no_grad():
             L = power_iteration(ray_trafo, torch.rand_like(x_in).view(-1, 1))
 

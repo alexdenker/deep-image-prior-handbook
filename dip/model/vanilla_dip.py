@@ -7,7 +7,7 @@ class DeepImagePrior(BaseDeepImagePrior):
         super().__init__(model, lr, num_steps, noise_std, callbacks)
 
     def compute_loss(self, x_pred, ray_trafo, y, **kwargs):
-        L = kwargs.get("alpha", 1.0)  
+        L = kwargs.get("L", 1.0)  
         # TODO: Is the scaling by the lipschitz constant neccessary?
         loss = torch.sum((ray_trafo.trafo(x_pred) - y)**2/L**2) 
         mse_loss = loss 
