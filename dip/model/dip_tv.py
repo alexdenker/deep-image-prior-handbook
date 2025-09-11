@@ -1,7 +1,6 @@
 import torch 
 import numpy as np 
 from tqdm import tqdm 
-from skimage.metrics import peak_signal_noise_ratio
 import deepinv as dinv 
 
 from .utils import MaskedPSNR, tv_loss
@@ -10,8 +9,8 @@ from ..physics import power_iteration
 
 
 class DeepImagePriorTV(BaseDeepImagePrior):
-    def __init__(self, model, lr, num_steps, tv_strength, noise_std=0.0, L=1.0, callbacks=None):
-        super().__init__(model, lr, num_steps, noise_std, L, callbacks)
+    def __init__(self, model, lr, num_steps, tv_strength, noise_std=0.0, callbacks=None, save_dir=None):
+        super().__init__(model, lr, num_steps, noise_std, callbacks, save_dir)
 
         self.tv_strength = tv_strength
 
@@ -24,8 +23,8 @@ class DeepImagePriorTV(BaseDeepImagePrior):
 
 
 class DeepImagePriorHQS(BaseDeepImagePrior):
-    def __init__(self, model, lr, num_steps, splitting_strength, tv_min, tv_max, inner_steps, noise_std=0.0, callbacks=None):
-        super().__init__(model, lr, num_steps, noise_std, callbacks)
+    def __init__(self, model, lr, num_steps, splitting_strength, tv_min, tv_max, inner_steps, noise_std=0.0, callbacks=None, save_dir=None):
+        super().__init__(model, lr, num_steps, noise_std, callbacks, save_dir)
 
         self.splitting_strength = splitting_strength
         self.tv_min = tv_min 
@@ -49,7 +48,10 @@ class DeepImagePriorHQS(BaseDeepImagePrior):
         loss_list = [] 
 
         x_splitting = torch.zeros_like(x_in)
-        tv_reg = np.logspace(np.log10(self.tv_min), np.log10(self.tv_max), self.num_steps // self.inner_steps)[::-1]
+
+        # decreasing sequence for tv prox 
+        # At the beginning we want a strong regularisation and gradually decrease it 
+        tv_reg = np.logspace(np.log10(self.tv_max), np.log10(self.tv_min), self.num_steps // self.inner_steps)[::-1]
 
         with torch.no_grad():
             L = power_iteration(ray_trafo, torch.rand_like(x_in).view(-1, 1))
@@ -59,7 +61,7 @@ class DeepImagePriorHQS(BaseDeepImagePrior):
         self.model.train()
         for i in tqdm(range(self.num_steps // self.inner_steps)):
             beta = self.splitting_strength / tv_reg[i] 
-            
+
             for _ in range(self.inner_steps):
                 optim.zero_grad()
 
@@ -79,6 +81,7 @@ class DeepImagePriorHQS(BaseDeepImagePrior):
 
             with torch.no_grad():
                 x_pred = self.model(x_in)
+                # arg min_x 1/2 || x - inp ||_2^2 + gamma * TV(x)
                 x_splitting = prior.prox(x_pred, gamma=tv_reg[i])
 
             

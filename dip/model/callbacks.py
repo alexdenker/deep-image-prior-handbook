@@ -1,4 +1,7 @@
-
+import torch 
+import numpy as np 
+import os 
+from PIL import Image 
 
 def track_best_psnr_output(best_psnr_output):
     """
@@ -14,3 +17,12 @@ def track_best_psnr_output(best_psnr_output):
             best_psnr_output['reco'] = x_pred.detach().cpu().clone()
     return callback
 
+def save_images(image_path, skip):
+
+    def callback(i, x_pred, loss, mse_loss, psnr):
+        if i % skip == 0:
+            img = torch.clamp(x_pred.detach().cpu(), 0,1).numpy()[0,0] * 255
+            img = img.astype(np.uint8)
+            Image.fromarray(img).save(os.path.join(image_path, f"reco_{i:05d}.png"))
+            pass 
+    return callback  

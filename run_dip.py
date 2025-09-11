@@ -8,7 +8,7 @@ import argparse
 
 from dip import (DeepImagePrior, get_unet_model, get_walnut_data, get_walnut_2d_ray_trafo, 
                 dict_to_namespace, DeepImagePriorHQS, DeepImagePriorTV,
-                track_best_psnr_output)
+                track_best_psnr_output, save_images)
 
 
 parser = argparse.ArgumentParser(description="Run DIP")
@@ -55,16 +55,16 @@ base_args, remaining = parser.parse_known_args()
 if base_args.method == "tv_hqs":
     parser.add_argument("--splitting_strength", 
                         type=float, 
-                        default=60.)
+                        default=60)
     parser.add_argument("--tv_min", 
                         type=float, 
-                        default=0.5)
+                        default=1e-2)
     parser.add_argument("--tv_max", 
                         type=float,
-                        default=1e-2)
+                        default=0.5)
     parser.add_argument("--inner_steps", 
                         type=int, 
-                        default=10)
+                        default=20)
 
 elif base_args.method == "tv":
     parser.add_argument("--tv_strength", 
@@ -155,7 +155,7 @@ z = z.to(device)
 y_noise = y.to(device)
 
 best_psnr = {'value': 0, 'idx': 0, 'reco': None}
-callbacks = [track_best_psnr_output(best_psnr)]
+callbacks = [track_best_psnr_output(best_psnr), save_images(save_dir_img, skip=10)]
 
 if args.method == "vanilla":
 
@@ -163,7 +163,8 @@ if args.method == "vanilla":
                          lr=args.lr, 
                          num_steps=args.num_steps, 
                          noise_std=args.noise_std, 
-                         callbacks=callbacks)
+                         callbacks=callbacks,
+                         save_dir=save_dir)
     
     x_pred, psnr_list, loss_list = dip.train(ray_trafo, y, z, x_gt=x)
 elif args.method == "tv_hqs":
@@ -175,7 +176,8 @@ elif args.method == "tv_hqs":
                          tv_min=args.tv_min, 
                          tv_max=args.tv_max, 
                          inner_steps=args.inner_steps,
-                         callbacks=callbacks)
+                         callbacks=callbacks,
+                         save_dir=save_dir)
 
     x_pred, psnr_list, loss_list = dip.train(ray_trafo, y, z, x_gt=x)
 elif args.method == "tv":
@@ -184,7 +186,8 @@ elif args.method == "tv":
                          num_steps=args.num_steps, 
                          noise_std=args.noise_std, 
                          tv_strength=args.tv_strength,
-                         callbacks=callbacks)
+                         callbacks=callbacks,
+                         save_dir=save_dir)
 
     x_pred, psnr_list, loss_list = dip.train(ray_trafo, y, z, x_gt=x)
     

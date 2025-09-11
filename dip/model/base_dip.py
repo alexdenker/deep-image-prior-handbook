@@ -6,7 +6,7 @@ from ..logging import FlexibleLogger
 from ..physics import power_iteration
 
 class BaseDeepImagePrior():
-    def __init__(self, model, lr, num_steps, noise_std, callbacks=None):
+    def __init__(self, model, lr, num_steps, noise_std, callbacks=None, save_dir=None):
         self.model = model 
 
         self.lr = lr
@@ -14,6 +14,7 @@ class BaseDeepImagePrior():
         self.noise_std = noise_std # add additional random noise to input 
 
         self.callbacks = callbacks if callbacks is not None else []
+        self.save_dir = save_dir
 
     def compute_loss(self, x_pred, ray_trafo, y, **kwargs):
         """
