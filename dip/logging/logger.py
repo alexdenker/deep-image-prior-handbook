@@ -3,6 +3,7 @@ import logging
 from typing import Optional
 from pathlib import Path
 from datetime import datetime
+import numpy as np
 try:
     import wandb
 except ImportError:
@@ -10,15 +11,15 @@ except ImportError:
 
 
 class FlexibleLogger:
-    def __init__(self, use_wandb: bool = False, project: Optional[str] = None, config: Optional[dict] = None, console_printing: bool=True, log_file: Optional[Path]=None):
+    def __init__(self, use_wandb: bool = False, project: Optional[str] = None, wandb_config: Optional[dict] = None, console_printing: bool=True, log_file: Optional[Path]=None, image_logging: Optional[int]=None):
         self.use_wandb = use_wandb and wandb is not None
         if self.use_wandb:
-            wandb.init(project=project, config=config)
+            wandb.init(project=project, config=wandb_config)
         # else:
         if log_file is None:
             Path("logs").mkdir(exist_ok=True)
             log_file = Path("logs") / f"log_{datetime.now():%Y-%m-%d_%H-%M-%S}.log"
-
+        self.image_logging = image_logging
         self._init_logging(log_file=log_file, console_printing=console_printing)
 
     def _init_logging(self, log_file, console_printing=False):
@@ -56,6 +57,8 @@ class FlexibleLogger:
 
         self.logger.info(msg)
     def log_img(self, img, step):
+        if self.image_logging is None or step % self.image_logging != 0:
+            return
         if not self.use_wandb:
             return
         if isinstance(img, torch.Tensor):

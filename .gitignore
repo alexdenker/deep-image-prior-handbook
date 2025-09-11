@@ -2,7 +2,7 @@
 
 data/Walnut1/
 wandb/
-
+logs/
 *.pdf
 *.png
 *.jpeg
