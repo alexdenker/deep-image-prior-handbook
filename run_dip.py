@@ -7,7 +7,7 @@ from PIL import Image
 import argparse 
 from datetime import datetime
 import wandb
-from dip import (DeepImagePrior, DeepImagePriorHQS, DeepImagePriorTV, AutoEncodingSequentialDeepImagePrior, 
+from dip import (DeepImagePrior, DeepImagePriorHQS, DeepImagePriorTV, AutoEncodingSequentialDeepImagePrior, SelfGuidanceDeepImagePrior, 
                 get_unet_model, get_walnut_data, get_walnut_2d_ray_trafo, 
                 dict_to_namespace,
                 track_best_psnr_output)
@@ -18,13 +18,13 @@ parser = argparse.ArgumentParser(description="Run DIP")
 parser.add_argument("--method",
                     type=str,
                     default="vanilla", 
-                    choices=["vanilla", "tv_hqs", "tv", "aseq"],
+                    choices=["vanilla", "tv_hqs", "tv", "aseq", "selfguided"],
                     help="DIP method to use")
 
 parser.add_argument("--model_inp", 
                     type=str, 
                     default="fbp", 
-                    choices=["fbp", "random"],
+                    choices=["fbp", "random", "adjoint"],
                     help="Input to the DIP")
 
 parser.add_argument("--num_steps", 
@@ -33,7 +33,7 @@ parser.add_argument("--num_steps",
 
 parser.add_argument("--lr", 
                     type=float,
-                    default=2e-4)
+                    default=1e-4)
 
 parser.add_argument("--noise_std", 
                     type=float,
@@ -76,12 +76,25 @@ elif base_args.method == "tv":
 elif base_args.method == "aseq":
     parser.add_argument("--denoise_strength",
                         type=float,
-                        default=0.001,
+                        default=0.01,
                         help="Denoising strength for the denoising prior")
     parser.add_argument("--num_inner_steps",
                         type=int,
                         default=5,
                         help="Number of inner optimisation steps for the aseq DIP")
+elif base_args.method == "selfguided":
+    parser.add_argument("--denoise_strength",
+                        type=float,
+                        default=0.01,
+                        help="Denoising strength for the denoising prior")
+    parser.add_argument("--num_noise_realisations",
+                        type=int,
+                        default=4,
+                        help="Number of noise realisations for the self-guided DIP")
+    parser.add_argument("--exp_weight",
+                        type=float,
+                        default=0.99,
+                        help="Weight for the exponential averaging of the output")
 else:
     pass 
 
@@ -155,6 +168,9 @@ Image.fromarray(img).save(os.path.join(save_dir, "groundtruth.png"))
 print("Number of parameters: ", sum([p.numel() for p in model.parameters()]))
 if args.model_inp == "fbp":
     z = x_fbp
+elif args.model_inp == "adjoint":
+    z = ray_trafo.trafo_adjoint(y).detach()
+    z = z/torch.max(z)
 else:
     g = torch.Generator()
     g.manual_seed(args.random_seed_noise)
@@ -177,7 +193,7 @@ logger_kwargs = {
     "project": args.wandb_project,
     "log_file": os.path.join(save_dir, f"log_{datetime.now():%Y-%m-%d_%H-%M-%S}.log"),
     "console_printing": True,
-    "image_logging": 20,
+    "image_logging": 25,
     "wandb_config": {
                      "project": args.wandb_project,
                      "entity": args.wandb_entity, 
@@ -225,8 +241,17 @@ elif args.method == "aseq":
                          noise_std=args.noise_std, 
                          denoise_strength=args.denoise_strength,
                          callbacks=callbacks)
-
-    x_pred, psnr_list, loss_list = dip.train(ray_trafo, y, z, x_gt=x, num_inner_steps=args.num_inner_steps,logger_kwargs=logger_kwargs)    
+    x_pred, psnr_list, loss_list = dip.train(ray_trafo, y, z, x_gt=x, num_inner_steps=args.num_inner_steps,logger_kwargs=logger_kwargs)
+elif args.method == "selfguided":
+    dip = SelfGuidanceDeepImagePrior(model=model, 
+                         lr=args.lr, 
+                         num_steps=args.num_steps, 
+                         noise_std=args.noise_std, 
+                         denoise_strength=args.denoise_strength,
+                         callbacks=callbacks)
+    x_pred, psnr_list, loss_list = dip.train(ray_trafo, y, z, x_gt=x, logger_kwargs=logger_kwargs,
+                         num_noise_realisations=args.num_noise_realisations,
+                         exp_weight=args.exp_weight)    
 else:
     raise NotImplementedError
 
