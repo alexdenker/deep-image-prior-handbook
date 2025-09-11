@@ -49,7 +49,7 @@ class DeepImagePriorHQS(BaseDeepImagePrior):
         loss_list = [] 
 
         x_splitting = torch.zeros_like(x_in)
-        tv_reg = np.logspace(np.log10(self.tv_min), np.log10(self.tv_max), self.num_steps)[::-1]
+        tv_reg = np.logspace(np.log10(self.tv_min), np.log10(self.tv_max), self.num_steps // self.inner_steps)[::-1]
 
         with torch.no_grad():
             L = power_iteration(ray_trafo, torch.rand_like(x_in).view(-1, 1))
