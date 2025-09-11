@@ -10,7 +10,8 @@ from PIL import Image
 import argparse 
 
 from dip import (DeepImagePrior, get_unet_model, get_walnut_data, get_walnut_2d_ray_trafo, 
-                dict_to_namespace, power_iteration, DeepImagePriorHQS, DeepImagePriorTV)
+                dict_to_namespace, DeepImagePriorHQS, DeepImagePriorTV,
+                track_best_psnr_output)
 
 
 parser = argparse.ArgumentParser(description="Run DIP")
@@ -143,11 +144,6 @@ img = img.astype(np.uint8)
 Image.fromarray(img).save(os.path.join(save_dir, "groundtruth.png"))
 
 
-x_test = torch.rand_like(x).view(-1, 1)
-L = power_iteration(ray_trafo, x_test)
-print("L: ", L)
-
-
 print("Number of parameters: ", sum([p.numel() for p in model.parameters()]))
 if args.model_inp == "fbp":
     z = x_fbp
@@ -161,14 +157,18 @@ noise_std = 0.0
 z = z.to(device)
 y_noise = y.to(device)
 
+best_psnr = {'value': 0, 'idx': 0, 'reco': None}
+callbacks = [track_best_psnr_output(best_psnr)]
+
 if args.method == "vanilla":
+
     dip = DeepImagePrior(model=model, 
                          lr=args.lr, 
                          num_steps=args.num_steps, 
                          noise_std=args.noise_std, 
-                         L=L)
+                         callbacks=callbacks)
     
-    x_pred, psnr_list, loss_list, best_psnr_image, best_psnr_idx = dip.train(ray_trafo, y, z)
+    x_pred, psnr_list, loss_list = dip.train(ray_trafo, y, z, x_gt=x)
 elif args.method == "tv_hqs":
     dip = DeepImagePriorHQS(model=model, 
                          lr=args.lr, 
@@ -178,37 +178,36 @@ elif args.method == "tv_hqs":
                          tv_min=args.tv_min, 
                          tv_max=args.tv_max, 
                          inner_steps=args.inner_steps,
-                         L=L)
+                         callbacks=callbacks)
 
-    x_pred, psnr_list, loss_list, best_psnr_image, best_psnr_idx = dip.train(ray_trafo, y, z)
+    x_pred, psnr_list, loss_list = dip.train(ray_trafo, y, z, x_gt=x)
 elif args.method == "tv":
-    DeepImagePriorTV
     dip = DeepImagePriorTV(model=model, 
                          lr=args.lr, 
                          num_steps=args.num_steps, 
                          noise_std=args.noise_std, 
                          tv_strength=args.tv_strength,
-                         L=L)
+                         callbacks=callbacks)
 
-    x_pred, psnr_list, loss_list, best_psnr_image, best_psnr_idx = dip.train(ray_trafo, y, z)
+    x_pred, psnr_list, loss_list = dip.train(ray_trafo, y, z, x_gt=x)
     
 else:
     raise NotImplementedError
 
+print(best_psnr['value'], best_psnr['index'])
 
-best_psnr = max(psnr_list)
 
 img = x_pred.detach().cpu().numpy()[0,0] * 255
 img = img.astype(np.uint8)
 Image.fromarray(img).save(os.path.join(save_dir, "final_reco.png"))
 
-img = best_psnr_image[0,0] * 255
+img = best_psnr['reco'][0,0].numpy() * 255
 img = img.astype(np.uint8)
 Image.fromarray(img).save(os.path.join(save_dir, "best_reco.png"))
 
 results = {} 
-results["best_psnr"] = float(best_psnr)
-results["best_psnr_idx"] = int(best_psnr_idx)
+results["best_psnr"] = float(best_psnr['value'])
+results["best_psnr_idx"] = int(best_psnr['index'])
 
 with open(os.path.join(save_dir, "results.yaml"), "w") as f:
     yaml.dump(results, f)

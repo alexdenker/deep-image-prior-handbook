@@ -6,7 +6,7 @@ import deepinv as dinv
 
 from .utils import create_circular_mask, tv_loss
 from .base_dip import BaseDeepImagePrior
-
+from ..physics import power_iteration
 
 
 class DeepImagePriorTV(BaseDeepImagePrior):
@@ -16,16 +16,16 @@ class DeepImagePriorTV(BaseDeepImagePrior):
         self.tv_strength = tv_strength
 
     def compute_loss(self, x_pred, ray_trafo, y, **kwargs):
-        
-        mse_loss = torch.sum((ray_trafo.trafo(x_pred) - y)**2/self.L**2) 
+        L = kwargs.get("L", 1.0)
+        mse_loss = torch.sum((ray_trafo.trafo(x_pred) - y)**2/L**2) 
         loss = mse_loss + self.tv_strength * tv_loss(x_pred)
         return loss, mse_loss 
 
 
 
 class DeepImagePriorHQS(BaseDeepImagePrior):
-    def __init__(self, model, lr, num_steps, splitting_strength, tv_min, tv_max, inner_steps, noise_std=0.0, L=1.0, callbacks=None):
-        super().__init__(model, lr, num_steps, noise_std, L, callbacks)
+    def __init__(self, model, lr, num_steps, splitting_strength, tv_min, tv_max, inner_steps, noise_std=0.0, callbacks=None):
+        super().__init__(model, lr, num_steps, noise_std, callbacks)
 
         self.splitting_strength = splitting_strength
         self.tv_min = tv_min 
@@ -57,6 +57,9 @@ class DeepImagePriorHQS(BaseDeepImagePrior):
         x_splitting = torch.zeros_like(x_in)
         tv_reg = np.logspace(np.log10(self.tv_min), np.log10(self.tv_max), self.num_steps)[::-1]
 
+        with torch.no_grad():
+            L = power_iteration(ray_trafo, torch.rand_like(x_in))
+
         self.model.train()
         for i in tqdm(range(self.num_steps // self.inner_steps)):
             beta = self.splitting_strength / tv_reg[i] 
@@ -69,7 +72,7 @@ class DeepImagePriorHQS(BaseDeepImagePrior):
                 else:
                     x_pred = self.model(x_in)
 
-                mse_loss = torch.sum((ray_trafo.trafo(x_pred) - y)**2/self.L**2) 
+                mse_loss = torch.sum((ray_trafo.trafo(x_pred) - y)**2/L**2) 
                 reg_loss = torch.mean((x_pred - x_splitting)**2)
                 loss = mse_loss + beta * reg_loss
                 loss.backward()
