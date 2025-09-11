@@ -26,7 +26,7 @@ class BaseDeepImagePrior():
         optim = torch.optim.Adam(self.model.parameters(), lr=self.lr)
         psnr_list, loss_list = [], []
         with torch.no_grad():
-            L = power_iteration(ray_trafo, torch.rand_like(x_in))
+            L = power_iteration(ray_trafo, torch.rand_like(x_in).view(-1, 1))
 
         psnr_fun = MaskedPSNR((x_in.shape[2], x_in.shape[3]))
 
