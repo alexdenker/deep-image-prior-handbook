@@ -2,6 +2,7 @@ import torch
 import numpy as np
 from tqdm import tqdm
 from collections import OrderedDict
+import matplotlib.pyplot as plt
 from ..physics import power_iteration
 
 from .utils import create_circular_mask, MaskedPSNR
@@ -76,13 +77,30 @@ class SelfGuidanceDeepImagePrior(BaseDeepImagePrior):
         loss = mse_loss + self.denoise_strength * denoise_loss
         return loss, mse_loss  # TODO: report the reg loss if it exists?
 
-    def train(self, ray_trafo, y, x_in, x_gt=None, return_metrics=True, **kwargs):
+    # def compute_loss(self, x, ray_trafo, y, z, **kwargs):
+    #     L2_inv = self.L2_inv if hasattr(self, "L2_inv") else kwargs.get("L2_inv", 1.0)
+    #     num_noise_realisations = (
+    #         self.num_noise_realisations
+    #         if hasattr(self, "num_noise_realisations")
+    #         else x.shape[0]
+    #     )
+
+    #     mse_loss = ((ray_trafo.trafo(x) - y).pow(2)).sum() * L2_inv
+    #     denoise_loss = (x - z).pow(2).sum() * num_noise_realisations
+    #     loss = mse_loss + self.denoise_strength * denoise_loss
+    #     return loss, mse_loss  # TODO: report the reg loss if it exists?
+
+
+    def train(self, ray_trafo, y, x_in, x_gt=None, return_metrics=True, logger = None, **kwargs):
+        if logger is None:
+            from ..logging import NullLogger
+            logger = NullLogger()
         num_steps = kwargs.get("num_steps", getattr(self, "num_steps", 1000))
         self.num_noise_realisations = kwargs.get(
             "num_noise_realisations", getattr(self, "num_noise_realisations", 4)
         )
         exp_weight = kwargs.get("exp_weight", getattr(self, "exp_weight", 0.99))
-        lr_z = kwargs.get("lr_z", getattr(self, "lr", 1e-1))
+        lr_z = kwargs.get("lr_z", getattr(self, "lr_z", 1e-1))
         self.L = kwargs.get("L")
         if self.L is None:
             with torch.no_grad():
@@ -98,20 +116,17 @@ class SelfGuidanceDeepImagePrior(BaseDeepImagePrior):
 
         # Make z learnable
         exp_average = torch.zeros_like(x_in)
-        z = torch.nn.Parameter(x_in.detach().to(x_in.device).clone())
+        device = x_in.device
+        z = torch.nn.Parameter(x_in.detach().clone().to(device))
         optim = torch.optim.Adam(self.model.parameters(), lr=self.lr)
         optim_z = torch.optim.Adam([z], lr=lr_z)
         # optim = torch.optim.Adam([
         #             {'params': self.model.parameters(), 'lr': self.lr},
         #             {'params': [z], 'lr': lr_z}
         #         ])
-
-        # Create a logger
-        logger_kwargs = kwargs.get("logger_kwargs", {})
-        if "use_wandb" not in logger_kwargs:
-            logger_kwargs["use_wandb"] = False
-        logger = FlexibleLogger(**logger_kwargs)
+        
         self.model.train()
+        
         for i in (
             pbar := tqdm(
                 range(num_steps), desc="Training SelfGuidanceDIP", dynamic_ncols=True
@@ -119,12 +134,22 @@ class SelfGuidanceDeepImagePrior(BaseDeepImagePrior):
         ):
             optim.zero_grad()
             optim_z.zero_grad()
+            
+            noise_max = 0.01*z.max().detach()
+
+            # x_pred = torch.zeros_like(x_in, device=device)
+            # for j in range(self.num_noise_realisations):
+            #     noise = noise_max * torch.rand_like(z, device=device)
+            #     x_pred += self.model(z+noise).squeeze()
+            # x_pred /= self.num_noise_realisations
+            # breakpoint()
+            # loss, mse_loss = self.compute_loss(x_pred, ray_trafo, y, z)
 
             z_expand = z.expand(
                 self.num_noise_realisations, -1, -1, -1
             )  # Expand z for N_noise
             eta = (
-                0.5 * z.max().detach() * torch.rand_like(z_expand)
+                noise_max * torch.rand_like(z_expand)
             )  # Random noise for self-guidance
             noisy_z = z_expand + eta
             x_pred = self.model(noisy_z)
@@ -146,11 +171,12 @@ class SelfGuidanceDeepImagePrior(BaseDeepImagePrior):
 
             with torch.no_grad():
                 exp_average = (
-                    exp_weight * exp_average + (1 - exp_weight) * x_pred_mean.detach()
+                    exp_weight * exp_average + (1 - exp_weight) * x_pred.detach()
                 )
             loss_list.append(loss.item())
             if x_gt is not None:
                 psnr_list.append(PSNR(x_gt, exp_average))
+
             log_data = OrderedDict(
                 [
                     ("loss", loss_list[-1]),
@@ -160,12 +186,12 @@ class SelfGuidanceDeepImagePrior(BaseDeepImagePrior):
                 ]
             )
 
-            desc = f"{i}:{i:04d} | " + " | ".join(
+            desc = f"{i:04d} | " + " | ".join(
                 f"{k}: {v:.4f}" for k, v in log_data.items()
             )
             pbar.set_description(desc)
             logger.log(log_data, step=i)
-            logger.log_img(exp_average, step=i)
+            logger.log_img(exp_average, step=i, title=f"Step {i:04d} | PSNR: {psnr_list[-1]:.2f}" if psnr_list else None)
 
             for cb in self.callbacks:
                 cb(i, x_pred, loss, mse_loss, psnr_list[-1])
