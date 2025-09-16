@@ -64,7 +64,11 @@ class AutoEncodingSequentialDeepImagePrior(BaseDeepImagePrior):
         loss = mse_loss + self.denoise_strength * loss_scaling * denoise_loss
         return loss, mse_loss  # TODO: report the reg loss if it exists?
 
-    def train(self, ray_trafo, y, x_in, x_gt=None, return_metrics=True, **kwargs):
+    def train(self, ray_trafo, y, x_in, x_gt=None, return_metrics=True, logger= None, **kwargs):
+        if logger is None:
+            from ..logging import NullLogger
+            logger = NullLogger()
+
         num_steps = kwargs.get("num_steps", getattr(self, "num_steps", 1000))
         num_inner_steps = kwargs.get(
             "num_inner_steps", getattr(self, "num_inner_steps", 1000)
@@ -85,11 +89,6 @@ class AutoEncodingSequentialDeepImagePrior(BaseDeepImagePrior):
         psnr_list, loss_list = [], []
         z = x_in.clone().detach()
 
-        # Create a logger
-        logger_kwargs = kwargs.get("logger_kwargs", {})
-        if "use_wandb" not in logger_kwargs:
-            logger_kwargs["use_wandb"] = False
-        logger = FlexibleLogger(**logger_kwargs)
         self.model.train()
         for i in (
             pbar := tqdm(
