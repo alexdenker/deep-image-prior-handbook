@@ -29,7 +29,7 @@ class FlexibleLogger:
         self.use_wandb = use_wandb and wandb is not None
         if self.use_wandb:
             wandb.init(project=project, config=wandb_config)
-        # else:
+            wandb.run.name = wandb_config["name"] if "name" in wandb_config else f"run_{datetime.now():%Y-%m-%d_%H-%M-%S}"
         if log_file is None:
             Path("logs").mkdir(exist_ok=True)
             log_file = Path("logs") / f"log_{datetime.now():%Y-%m-%d_%H-%M-%S}.log"
