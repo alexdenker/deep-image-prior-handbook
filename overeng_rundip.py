@@ -263,6 +263,7 @@ def run_dip(args, logger=None, paths=None):
             y,
             z,
             x_gt=x,
+            logger=logger,
             num_inner_steps=args.num_inner_steps,
             logger_kwargs=logger_kwargs,
         )
@@ -344,7 +345,7 @@ def run_dip(args, logger=None, paths=None):
 if __name__ == "__main__":
     try:
         args = parse_arguments()
-        wandb_project = f"SelfGuidedDIP"
+        wandb_project = f"Aseq_DIP"
         wandb_entity = "zkereta"
         base_path = (
             f"results_withskipchannels/{args.method}/{args.model_inp}_{args.denoise_strength}"

@@ -1,1 +1,1 @@
-from .logger import FlexibleLogger
+from .logger import FlexibleLogger, NullLogger
