@@ -10,7 +10,7 @@ import wandb
 from dip import (DeepImagePrior, DeepImagePriorHQS, DeepImagePriorTV, AutoEncodingSequentialDeepImagePrior, SelfGuidanceDeepImagePrior, 
                 get_unet_model, get_walnut_data, get_walnut_2d_ray_trafo, 
                 dict_to_namespace,
-                track_best_psnr_output, save_images)
+                track_best_psnr_output, save_images, early_stopping)
 
 
 parser = argparse.ArgumentParser(description="Run DIP")
@@ -182,11 +182,17 @@ z = z.to(device)
 y_noise = y.to(device)
 
 best_psnr = {'value': 0, 'idx': 0, 'reco': None}
-callbacks = [track_best_psnr_output(best_psnr), save_images(save_dir_img, skip=10)]
+best_psnr_early_stopping = {'value': 0, 'index': 0, 'reco': None}
+patience = 1000
+delta = 0.98 
+variance_list = []
+callbacks = [track_best_psnr_output(best_psnr), 
+             save_images(save_dir_img, skip=10), 
+             early_stopping(patience=patience, delta=delta, variance_list=variance_list, best_psnr=best_psnr_early_stopping)]
 
 args.use_wandb = True
 args.wandb_project = f"DIP_{args.method}"
-args.wandb_entity = "zkereta"
+args.wandb_entity = "alexanderdenker"
 
 logger_kwargs = {
     "use_wandb": args.use_wandb,
@@ -272,6 +278,14 @@ Image.fromarray(img).save(os.path.join(save_dir, "best_reco.png"))
 results = {} 
 results["best_psnr"] = float(best_psnr['value'])
 results["best_psnr_idx"] = int(best_psnr['index'])
+
+if best_psnr_early_stopping['reco'] is not None:
+    img = best_psnr_early_stopping['reco'][0,0].numpy() * 255
+    img = img.astype(np.uint8)
+    Image.fromarray(img).save(os.path.join(save_dir, "best_reco_early_stopping.png"))
+    results["best_psnr_early_stopping"] = float(best_psnr_early_stopping['value'])
+    results["best_psnr_early_stopping_idx"] = int(best_psnr_early_stopping['index'])
+
 
 with open(os.path.join(save_dir, "results.yaml"), "w") as f:
     yaml.dump(results, f)
