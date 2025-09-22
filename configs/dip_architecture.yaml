@@ -1,6 +1,6 @@
-channels: [128, 128, 128, 128, 128, 128]
 scales: 6
-skip: [0, 0, 0, 0, 0, 0]
+channels: [128, 128, 128, 128, 128, 128]
+skip_channels: [0, 0, 0, 0, 4, 4]
 activation: 'leaky_relu' # relu silu leakyrelu
 padding_mode: 'zeros' # circular zeros
 upsample_mode: 'nearest' # nearest bilinear (note that bilinear is not reproducible on GPU)
