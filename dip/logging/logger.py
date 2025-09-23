@@ -13,13 +13,15 @@ except ImportError:
 import matplotlib.pyplot as plt
 
 class NullLogger:
-    def __init__(self):
+    def __init__(self, console_printing=False):
         self.use_wandb = False
+        self.console_printing = console_printing
     def log(self, data, step=None):
         desc = f"Step {step} | " + " | ".join(
                     f"{k}: {v:.4f}" for k, v in data.items()
                 )
-        print(desc)
+        if self.console_printing:
+            print(desc)
     def log_img(self, img, step=None):
         pass
 

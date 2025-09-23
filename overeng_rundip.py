@@ -20,6 +20,8 @@ from dip import (
     get_walnut_2d_ray_trafo,
     dict_to_namespace,
     track_best_psnr_output,
+    save_images,
+    early_stopping,
 )
 
 
@@ -42,7 +44,7 @@ def parse_arguments():
         help="Input to the DIP",
     )
 
-    parser.add_argument("--num_steps", type=int, default=10000)
+    parser.add_argument("--num_steps", type=int, default=20000)
 
     parser.add_argument("--lr", type=float, default=1e-4)
 
@@ -187,7 +189,7 @@ def run_dip(args, logger=None, paths=None):
     img = x[0, 0].cpu().numpy() * 255
     img = img.astype(np.uint8)
     Image.fromarray(img).save(os.path.join(paths["imgs"], "GroundTruth.png"))
-
+    save_dir_img = paths["imgs"]
     if args.model_inp == "fbp":
         z = x_fbp
     elif args.model_inp == "adjoint":
@@ -202,9 +204,15 @@ def run_dip(args, logger=None, paths=None):
 
     z = z.to(device)
     y_noise = y.to(device)
-
-    best_psnr = {"value": 0, "idx": 0, "reco": None}
-    callbacks = [track_best_psnr_output(best_psnr)]
+    
+    best_psnr = {'value': 0, 'idx': 0, 'reco': None}
+    best_psnr_early_stopping = {'value': 0, 'index': 0, 'reco': None}
+    patience = 1000
+    delta = 0.98 
+    variance_list = []
+    callbacks = [track_best_psnr_output(best_psnr), 
+                 save_images(save_dir_img, skip=10), 
+                 early_stopping(patience=patience, delta=delta, variance_list=variance_list, best_psnr=best_psnr_early_stopping)]
 
     if args.method == "vanilla":
         dip = DeepImagePrior(
@@ -255,6 +263,7 @@ def run_dip(args, logger=None, paths=None):
             y,
             z,
             x_gt=x,
+            logger=logger,
             num_inner_steps=args.num_inner_steps,
             logger_kwargs=logger_kwargs,
         )
@@ -295,7 +304,13 @@ def run_dip(args, logger=None, paths=None):
     results["loss"] = loss_list
     results["best_psnr"] = float(best_psnr["value"])
     results["best_psnr_idx"] = int(best_psnr["index"])
-
+    if best_psnr_early_stopping['reco'] is not None:
+        img = best_psnr_early_stopping['reco'][0,0].numpy() * 255
+        img = img.astype(np.uint8)
+        Image.fromarray(img).save(os.path.join(paths["imgs"], "Best_Reconstruction_EarlyStopping.png"))
+        results["best_psnr_early_stopping"] = float(best_psnr_early_stopping['value'])
+        results["best_psnr_early_stopping_idx"] = int(best_psnr_early_stopping['index'])
+    
     with open(os.path.join(paths["base"], "results.yaml"), "w") as f:
         yaml.dump(results, f)
 
@@ -330,10 +345,10 @@ def run_dip(args, logger=None, paths=None):
 if __name__ == "__main__":
     try:
         args = parse_arguments()
-        wandb_project = f"DIP_SelfGuidanceTestingBlah"
+        wandb_project = f"Aseq_DIP"
         wandb_entity = "zkereta"
         base_path = (
-            f"dip_results/{args.method}/{args.model_inp}_{args.denoise_strength}"
+            f"results_withskipchannels/{args.method}/{args.model_inp}_{args.denoise_strength}"
         )
         if args.method == "aseq":
             suffix = f"_{args.num_inner_steps}"
