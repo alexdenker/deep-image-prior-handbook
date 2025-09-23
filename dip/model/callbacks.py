@@ -28,7 +28,50 @@ def save_images(image_path, skip):
     return callback  
 
 
-def early_stopping(patience, delta, variance_list, best_psnr):
+
+def early_stopping(patience, delta, w, variance_list, best_psnr):
+    """
+    Early stopping based on the running variance of the prediction. 
+    Variance calculated using a sliding window approach.
+    
+    patience: number of iterations to wait after last minimum before stopping
+    delta: threshold factor for new minimum (e.g. 0.99 means new minimum must be at least 1% lower)
+    w: window size for variance calculation
+    variance_list: list to store variance values
+    best_psnr: dict to store {'value': 0, 'index': 0, 'output': None}
+    """
+
+    g_min = float('inf')
+    i_min = 0 # early stopping index 
+    stopped = False
+    x_buffer = []
+
+    def callback(i, x_pred, loss, mse_loss, psnr):
+        nonlocal x_buffer, g_min, i_min, stopped
+        
+        x = x_pred.detach().cpu().numpy().ravel()
+        x_buffer.append(x)
+        if len(x_buffer) > w:
+            x_buffer.pop(0)
+        
+        running_var = np.mean(np.var(x_buffer, axis=0))
+        variance_list.append(running_var)
+        if len(x_buffer) == w and not stopped:
+            g_i = running_var
+            if g_i < delta * g_min:
+                g_min = g_i
+                i_min = i
+                best_psnr['value'] = psnr
+                best_psnr['index'] = i_min
+                best_psnr['reco'] = x_pred.detach().cpu().clone()
+
+            if i >= i_min + patience:
+                stopped = True 
+        
+    return callback
+
+
+def early_stopping_welfords(patience, delta, variance_list, best_psnr):
     """
     Early stopping based on the running variance of the prediction. 
     Variance calculated using Welfords online algorithm. 
@@ -67,9 +110,9 @@ def early_stopping(patience, delta, variance_list, best_psnr):
                 g_min = g_i
                 i_min = i
                 best_psnr['value'] = psnr
-                best_psnr['idx'] = i
+                best_psnr['index'] = i_min
                 best_psnr['reco'] = x_pred.detach().cpu().clone()
-                
+                print(f"New minimum variance {g_min:.6f} at iteration {i_min}, PSNR: {best_psnr['value']:.2f}")
             if i >= i_min + patience:
                 stopped = True 
         

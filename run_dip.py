@@ -11,6 +11,7 @@ from dip import (DeepImagePrior, DeepImagePriorHQS, DeepImagePriorTV, AutoEncodi
                 get_unet_model, get_walnut_data, get_walnut_2d_ray_trafo, 
                 dict_to_namespace,
                 track_best_psnr_output, save_images, early_stopping)
+from configs.wandb_config import WANDB_PROJECT, WANDB_ENTITY
 
 
 parser = argparse.ArgumentParser(description="Run DIP")
@@ -52,6 +53,11 @@ parser.add_argument("--random_seed_noise",
 parser.add_argument("--device",
                     type=str,
                     default="cuda")
+
+parser.add_argument("--use_wandb",
+                    type=bool,
+                    default=False,
+                    help="Whether to use wandb logging or not")
 
 base_args, remaining = parser.parse_known_args()
 
@@ -101,11 +107,11 @@ else:
 args = parser.parse_args()
 
 
-
-save_dir = f"dip_results/{args.method}/{args.model_inp}"
+time = datetime.now().strftime("%Y%m%d_%H%M%S")
+save_dir = f"dip_results/{args.method}/{args.model_inp}/{time}"
 os.makedirs(save_dir, exist_ok=True)
 
-save_dir_img = f"dip_results/{args.method}/{args.model_inp}/imgs"
+save_dir_img = f"dip_results/{args.method}/{args.model_inp}/{time}/imgs"
 os.makedirs(save_dir_img, exist_ok=True)
 
 device = args.device
@@ -183,26 +189,25 @@ y_noise = y.to(device)
 
 best_psnr = {'value': 0, 'idx': 0, 'reco': None}
 best_psnr_early_stopping = {'value': 0, 'index': 0, 'reco': None}
+
+# defaults from subspace DIP paper for early stopping
 patience = 1000
-delta = 0.98 
+delta = 0.99
+w = 100
 variance_list = []
 callbacks = [track_best_psnr_output(best_psnr), 
-             save_images(save_dir_img, skip=10), 
-             early_stopping(patience=patience, delta=delta, variance_list=variance_list, best_psnr=best_psnr_early_stopping)]
-
-args.use_wandb = True
-args.wandb_project = f"DIP_{args.method}"
-args.wandb_entity = "alexanderdenker"
+             save_images(save_dir_img, skip=100), 
+             early_stopping(patience=patience, delta=delta, w=w,variance_list=variance_list, best_psnr=best_psnr_early_stopping)]
 
 logger_kwargs = {
     "use_wandb": args.use_wandb,
-    "project": args.wandb_project,
+    "project": WANDB_PROJECT,
     "log_file": os.path.join(save_dir, f"log_{datetime.now():%Y-%m-%d_%H-%M-%S}.log"),
     "console_printing": True,
     "image_logging": 25,
     "wandb_config": {
-                     "project": args.wandb_project,
-                     "entity": args.wandb_entity, 
+                     "project": WANDB_PROJECT,
+                     "entity": WANDB_ENTITY, 
                      "name": f"DIP_{args.method}_{args.model_inp}_{args.random_seed}",
                      "mode": "online" if args.use_wandb else "disabled",
                      "settings": wandb.Settings(start_method="fork", code_dir="wandb"),
@@ -286,9 +291,14 @@ if best_psnr_early_stopping['reco'] is not None:
     results["best_psnr_early_stopping"] = float(best_psnr_early_stopping['value'])
     results["best_psnr_early_stopping_idx"] = int(best_psnr_early_stopping['index'])
 
+    np.save(os.path.join(save_dir, "variance.npy"), np.asarray(variance_list))
 
 with open(os.path.join(save_dir, "results.yaml"), "w") as f:
     yaml.dump(results, f)
+
+args = vars(args)
+with open(os.path.join(save_dir, "config.yaml"), "w") as f:
+    yaml.dump(args, f)
 
 loss_list = np.asarray(loss_list)
 np.save(os.path.join(save_dir, "loss.npy"), loss_list)
