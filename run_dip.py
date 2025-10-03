@@ -28,6 +28,12 @@ parser.add_argument("--model_inp",
                     choices=["fbp", "random", "adjoint"],
                     help="Input to the DIP")
 
+parser.add_argument("--phantom",
+                    type=str,
+                    default="walnut",
+                    choices=["walnut", "shepplogan"],
+                    help="phantom to test the DIP")
+
 parser.add_argument("--num_steps", 
                     type=int,
                     default=10000)
@@ -108,10 +114,10 @@ args = parser.parse_args()
 
 
 time = datetime.now().strftime("%Y%m%d_%H%M%S")
-save_dir = f"dip_results/{args.method}/{args.model_inp}/{time}"
+save_dir = f"dip_results/{args.phantom}/{args.method}/{args.model_inp}/{time}"
 os.makedirs(save_dir, exist_ok=True)
 
-save_dir_img = f"dip_results/{args.method}/{args.model_inp}/{time}/imgs"
+save_dir_img = f"dip_results/{args.phantom}/{args.method}/{args.model_inp}/{time}/imgs"
 os.makedirs(save_dir_img, exist_ok=True)
 
 device = args.device
@@ -159,16 +165,50 @@ ray_trafo = get_walnut_2d_ray_trafo(
     angular_sub_sampling=cfg.data.angular_sub_sampling,
     proj_col_sub_sampling=cfg.data.proj_col_sub_sampling)
 ray_trafo.to(device)
-data = get_walnut_data(cfg, ray_trafo=ray_trafo)
 
+if args.phantom == "walnut":
+    data = get_walnut_data(cfg, ray_trafo=ray_trafo)
 
-y, x, x_fbp = data[0]
+    y, x, x_fbp = data[0]
+elif args.phantom == "shepplogan":
+    from skimage.data import shepp_logan_phantom
+    sl = shepp_logan_phantom() 
+    from skimage.transform import resize
+
+    #x = resize(sl, (501, 501))
+    pad_top = 50
+    pad_bottom = 51
+    pad_left = 50
+    pad_right = 51
+
+    x = np.pad(sl, 
+            ((pad_top, pad_bottom), (pad_left, pad_right)),
+            mode='constant', 
+            constant_values=0)
+
+    x = torch.from_numpy(x).unsqueeze(0).unsqueeze(0).float().to(cfg.device)
+    print(x.shape)
+    y = ray_trafo.trafo(x) 
+    g = torch.Generator(device=y.device).manual_seed(1234)
+    y = y +0.01 * torch.mean(y.abs()) * torch.randn(y.shape, generator=g, device=y.device)
+    x_fbp = ray_trafo.fbp(y)
+else:
+    raise NotImplementedError
+
 #y = y[0,0,0,:].unsqueeze(-1)
 im_size = x.shape[-1]
 
 img = x[0,0].cpu().numpy() * 255
 img = img.astype(np.uint8)
 Image.fromarray(img).save(os.path.join(save_dir, "groundtruth.png"))
+
+img_fbp = torch.clamp(x_fbp[0,0], 0,1).cpu().numpy() * 255
+img_fbp = img_fbp.astype(np.uint8)
+Image.fromarray(img_fbp).save(os.path.join(save_dir, "fbp.png"))
+
+print("x: ", x.min(), x.max(), x.shape)
+print("y: ", y.min(), y.max(), y.shape)
+print("x fbp: ", x_fbp.min(), x_fbp.max(), x_fbp.shape)
 
 
 print("Number of parameters: ", sum([p.numel() for p in model.parameters()]))
