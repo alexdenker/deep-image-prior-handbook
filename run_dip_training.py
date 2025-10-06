@@ -162,14 +162,12 @@ dataset = {
         ray_trafo=ray_trafo,
         im_size=cfg.data.im_size,
         device=device,
-        length=10,
     ),
     "validation": get_disk_dist_ellipses_dataset(
         fold="validation",
         ray_trafo=ray_trafo,
         im_size=cfg.data.im_size,
         device=device,
-        length=10,
     )
 }
 
@@ -177,7 +175,7 @@ sampler = ParameterSampler(model=model, dataset=dataset)
 sampler.sample(optim_kwargs={
     "torch_manual_seed": 42,
     "batch_size": 4,
-    "epochs": 10,
+    "epochs": 50,
     "num_samples": 100,
     "sampling_strategy": "linear",
     "burn_in": 100,
