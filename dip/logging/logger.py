@@ -133,7 +133,7 @@ class FlexibleLogger:
 
     def log_dict(self, data:dict, message:str=None):
         if message is not None:
-            self.logger.info(f"{"="*30}{message}{"="*30}")
+            self.logger.info(f"{'='*30}{message}{'='*30}")
         max_key_len = max(len(str(k)) for k in data.keys())
         for key, value in data.items():
             if isinstance(value, torch.nn.Parameter) or isinstance(value, torch.Tensor):
@@ -145,7 +145,7 @@ class FlexibleLogger:
                 val_str = str(value).replace("\n", " ").replace("  ", " ")
             self.logger.info(f"    {key:<{max_key_len}} : {val_str}")
         if message is not None:
-            self.logger.info(f"{"="*30}{"="*len(message)}{"="*30}")
+            self.logger.info(f"{'='*30}{'='*len(message)}{'='*30}")
 
     def info(self, message: str):
         self.logger.info(message)
