@@ -38,16 +38,16 @@ class ParameterSampler:
         )
         self.parameters_samples = []
 
-    def add_parameters_samples(self, use_cpu: bool = True) -> List[Tensor]:
+    def add_parameters_samples(self) -> List[Tensor]:
     
         parameter_vec = get_params_from_nn_module(
                 self.model,
                 exclude_norm_layers=self.exclude_norm_layers,
                 include_bias=self.include_bias)
-        self.parameters_samples.append(
-            parameter_vec if not use_cpu else parameter_vec.cpu()
-        )
-    
+        # store a plain CPU copy that cannot keep the graph alive
+        snap = parameter_vec.detach().cpu().clone()
+        self.parameters_samples.append(snap)
+
     def create_sampling_sequence(self, 
         burn_in: int, 
         num_overall_updates : int, 
@@ -112,7 +112,7 @@ class ParameterSampler:
             schedule_every_batch = isinstance(
                 self._scheduler, (CyclicLR, OneCycleLR))
         
-        best_model_wts = deepcopy(self.model.state_dict())
+        best_model_wts = {k: v.detach().cpu().clone() for k, v in self.model.state_dict().items()}
         best_psnr = -np.inf
 
         self.model.to(self.device)
@@ -137,7 +137,7 @@ class ParameterSampler:
                         fbp = fbp.to(self.device)
                         gt = gt.to(self.device)
                         # zero the parameter gradients
-                        self._optimizer.zero_grad()
+                        self._optimizer.zero_grad(set_to_none=True)
 
                         # track gradients only if in train phase
                         with torch.set_grad_enabled(phase == 'train'):
@@ -189,7 +189,7 @@ class ParameterSampler:
                     # deep copy the model (if it is the best one seen so far)
                     if phase == 'validation' and epoch_psnr > best_psnr:
                         best_psnr = epoch_psnr
-                        best_model_wts = deepcopy(self.model.state_dict())
+                        best_model_wts = {k: v.detach().cpu().clone() for k, v in self.model.state_dict().items()}
                         if optim_kwargs['save_best_learned_params_path'] is not None:
                             self.save_learned_params(
                                 optim_kwargs['save_best_learned_params_path'])
