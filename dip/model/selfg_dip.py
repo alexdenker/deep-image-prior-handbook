@@ -53,10 +53,11 @@ class SelfGuidanceDeepImagePrior(BaseDeepImagePrior):
     """
 
     def __init__(
-        self, model, lr, num_steps, denoise_strength, noise_std, L=1.0, callbacks=None
+        self, model, lr, num_steps, denoise_strength, noise_std, rel_noise=0.01, L=1.0, callbacks=None
     ):
         super().__init__(model, lr, num_steps, noise_std, callbacks)
         self.denoise_strength = denoise_strength
+        self.rel_noise = rel_noise
         self.name = "SelfGuidanceDIP"  # or self.__class__.__name__
 
     def compute_loss(self, x, x_pred_mean, ray_trafo, y, z, **kwargs):
@@ -135,7 +136,7 @@ class SelfGuidanceDeepImagePrior(BaseDeepImagePrior):
             optim.zero_grad()
             optim_z.zero_grad()
             
-            noise_max = 0.01*z.max().detach()
+            noise_max = self.rel_noise *z.max().detach()
 
             # x_pred = torch.zeros_like(x_in, device=device)
             # for j in range(self.num_noise_realisations):
@@ -200,6 +201,6 @@ class SelfGuidanceDeepImagePrior(BaseDeepImagePrior):
             logger.finish()
 
         if return_metrics:
-            return z, psnr_list, loss_list
+            return exp_average, psnr_list, loss_list
         else:
-            return z
+            return exp_average

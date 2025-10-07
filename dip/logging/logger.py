@@ -22,7 +22,7 @@ class NullLogger:
                 )
         if self.console_printing:
             print(desc)
-    def log_img(self, img, step=None):
+    def log_img(self, img, step=None, title=None):
         pass
 
 

@@ -107,6 +107,10 @@ elif base_args.method == "selfguided":
                         type=float,
                         default=0.99,
                         help="Weight for the exponential averaging of the output")
+    parser.add_argument("--relative_noise", 
+                        type=float,
+                        default=0.01, 
+                        help="relative level of noise added to input")
 else:
     pass 
 
@@ -302,6 +306,7 @@ elif args.method == "selfguided":
                          num_steps=args.num_steps, 
                          noise_std=args.noise_std, 
                          denoise_strength=args.denoise_strength,
+                         rel_noise=args.relative_noise,
                          callbacks=callbacks)
     x_pred, psnr_list, loss_list = dip.train(ray_trafo, y, z, x_gt=x, logger_kwargs=logger_kwargs,
                          num_noise_realisations=args.num_noise_realisations,
