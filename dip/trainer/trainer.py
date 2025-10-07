@@ -9,7 +9,6 @@ import numpy as np
 import torch.nn as nn
 
 from torch import Tensor
-from copy import deepcopy
 from math import ceil
 from tqdm import tqdm
 from torch.utils.data import DataLoader
