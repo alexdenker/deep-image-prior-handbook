@@ -11,3 +11,6 @@ logs/
 *.mat
 dip_results/
 .ipynb_checkpoints/
+.venv/
+parameters/
+params/
