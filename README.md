@@ -3,7 +3,7 @@
 This repository contains the code accompanying the book chapter *"Deep Image Prior for Image Reconstruction"*. We analyze and compare various Deep Image Prior (DIP) methods for computed tomography (CT) image reconstruction, with a focus on μ-CT measurements of a walnut.
 
 <p align="center">
-  <img src="imgs/dip_psnr_curve.png" width="400" alt="DIP"/>
+  <img src="imgs/dip_psnr_curve.png" width="600" alt="DIP"/>
   
 </p>
 
