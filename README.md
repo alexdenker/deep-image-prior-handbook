@@ -20,7 +20,7 @@ This repository provides implementations of several DIP variants:
 | **DIP+TV HQS** | DIP+TV using Half-Quadratic Splitting | - |
 | **Self-Guidance DIP** | Self-guided regularisation for improved stability | [Liang et al. (2024)](https://arxiv.org/abs/2402.04097) |
 | **aSeqDIP** | Auto-encoding Sequential DIP | [Alkhouri et al. (2024)](https://openreview.net/forum?id=K1EG2ABzNE&noteId=KLbtyQ08BC) |
-
+| **EDIP** |  warm-started DIP (pretrained on ellipses dataset) | [Barbano et al. (2022)](https://arxiv.org/abs/2111.11926) | 
 ## Installation
 
 
@@ -93,4 +93,5 @@ If you use this code in your research, please cite:
 - Baguer, D. O., Leuschner, J., & Schmidt, M. (2020). Computed tomography reconstruction using deep image prior and learned reconstruction methods. *Inverse Problems*.
 - Liang, S., Bell, E., Qu, Q., Wang, R., & Ravishankar, S. (2025). Analysis of Deep Image Prior and Exploiting Self-Guidance for Image Reconstruction. *IEEE TCI*.
 - Alkhouri, I., Liang, S., Bell, E., Qu, Q., Wang, R., Ravishankar, S. (2024). Image Reconstruction Via Autoencoding Sequential Deep Image Prior. *NeurIPS*
+- Barbano, R., Leuschner, J., Schmidt, M., Denker, A., Hauptmann, A., Maass, P., Jin, B. (2023). An Educated Warm Start For Deep Image Prior-Based Micro CT Reconstruction. *IEEE TCI*.
 
