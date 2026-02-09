@@ -19,7 +19,7 @@ This repository provides implementations of several DIP variants:
 | **DIP+TV** | DIP with total variation regularisation via autodiff | [Baguer et al. (2020)](https://arxiv.org/abs/2003.04989) |
 | **DIP+TV HQS** | DIP+TV using Half-Quadratic Splitting | - |
 | **Self-Guidance DIP** | Self-guided regularisation for improved stability | [Liang et al. (2024)](https://arxiv.org/abs/2402.04097) |
-| **aSeqDIP** | Auto-encoding Sequential DIP | [(Alkhouri et al. (2024)](https://openreview.net/forum?id=K1EG2ABzNE&noteId=KLbtyQ08BC) |
+| **aSeqDIP** | Auto-encoding Sequential DIP | [Alkhouri et al. (2024)](https://openreview.net/forum?id=K1EG2ABzNE&noteId=KLbtyQ08BC) |
 
 ## Installation
 
