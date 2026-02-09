@@ -40,6 +40,8 @@ conda activate dip-handbook
 
 ### Walnut CT Dataset
 
+First, the [Walnut dataset](https://zenodo.org/records/2686726) has to be downloaded from zenodo. It is sufficient to only download [Walnut1.zip](https://zenodo.org/records/2686726/files/Walnut1.zip?download=1) and place it in the `data/` directory.
+
 The forward operator (ray transform matrix) can be constructed by running:
 
 ```bash
