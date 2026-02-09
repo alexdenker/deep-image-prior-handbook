@@ -22,3 +22,12 @@ python create_walnut_ray_trafo_matrix.py
 ```
 
 This construction can take up to 45min. You can also download it [here](https://zenodo.org/record/7282279/files/single_slice_ray_trafo_matrix_walnut1_orbit2_ass20_css6.mat?download=1).
+
+
+### Installation 
+
+You can install the enviroment using:
+
+```
+conda env create -f environment.yml
+```
