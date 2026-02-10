@@ -13,3 +13,6 @@ dip_results/
 .venv/
 parameters/
 params/
+results/
+configs/wandb_config.py
+error_logs/
