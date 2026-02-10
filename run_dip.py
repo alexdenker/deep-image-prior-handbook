@@ -7,7 +7,7 @@ from PIL import Image
 import argparse 
 from datetime import datetime
 import wandb
-from dip import (DeepImagePrior, DeepImagePriorHQS, DeepImagePriorTV, AutoEncodingSequentialDeepImagePrior, SelfGuidanceDeepImagePrior, 
+from dip import (DeepImagePrior, DeepImagePriorHQS, DeepImagePriorTV, AutoEncodingSequentialDeepImagePrior, SelfGuidanceDeepImagePrior, DeepImagePriorLBFGS,
                 get_unet_model, get_walnut_data, get_walnut_2d_ray_trafo, 
                 dict_to_namespace,
                 track_best_psnr_output, save_images, early_stopping)
@@ -19,7 +19,7 @@ parser = argparse.ArgumentParser(description="Run DIP")
 parser.add_argument("--method",
                     type=str,
                     default="vanilla", 
-                    choices=["vanilla", "tv_hqs", "tv", "aseq", "selfguided"],
+                    choices=["vanilla", "tv_hqs", "tv", "aseq", "selfguided", "edip", "edip_tv", "dip_lbfgs"],
                     help="DIP method to use")
 
 parser.add_argument("--model_inp", 
@@ -36,7 +36,7 @@ parser.add_argument("--phantom",
 
 parser.add_argument("--num_steps", 
                     type=int,
-                    default=10000)
+                    default=3000)
 
 parser.add_argument("--lr", 
                     type=float,
@@ -81,6 +81,21 @@ if base_args.method == "tv_hqs":
                         type=int, 
                         default=20)
 
+elif base_args.method == "edip":
+    parser.add_argument("--pretrained_path", 
+                        type=str,
+                        default="pretrained_model/epoch_8_nn_learned_params.pt")
+elif base_args.method == "edip_tv":
+    parser.add_argument("--pretrained_path", 
+                        type=str,
+                        default="pretrained_model/epoch_8_nn_learned_params.pt")
+    parser.add_argument("--tv_strength", 
+                        type=float,
+                        default=1e-5)
+elif base_args.method == "dip_lbfgs":
+    parser.add_argument("--tv_strength", 
+                        type=float,
+                        default=1e-5)
 elif base_args.method == "tv":
     parser.add_argument("--tv_strength", 
                         type=float,
@@ -151,7 +166,6 @@ model = get_unet_model(in_ch=1, out_ch=1, scales=model_dict.scales,
                         upsample_mode=model_dict.upsample_mode)   
 model.to(device)
 model.train()
-
     
 cfg_dict = {}
 with open('configs/walnut_config.yaml', 'r') as f:
@@ -194,7 +208,7 @@ elif args.phantom == "shepplogan":
     print(x.shape)
     y = ray_trafo.trafo(x) 
     g = torch.Generator(device=y.device).manual_seed(1234)
-    y = y +0.01 * torch.mean(y.abs()) * torch.randn(y.shape, generator=g, device=y.device)
+    y = y + 0.01 * torch.mean(y.abs()) * torch.randn(y.shape, generator=g, device=y.device)
     x_fbp = ray_trafo.fbp(y)
 else:
     raise NotImplementedError
@@ -209,11 +223,6 @@ Image.fromarray(img).save(os.path.join(save_dir, "groundtruth.png"))
 img_fbp = torch.clamp(x_fbp[0,0], 0,1).cpu().numpy() * 255
 img_fbp = img_fbp.astype(np.uint8)
 Image.fromarray(img_fbp).save(os.path.join(save_dir, "fbp.png"))
-
-print("x: ", x.min(), x.max(), x.shape)
-print("y: ", y.min(), y.max(), y.shape)
-print("x fbp: ", x_fbp.min(), x_fbp.max(), x_fbp.shape)
-
 
 print("Number of parameters: ", sum([p.numel() for p in model.parameters()]))
 if args.model_inp == "fbp":
@@ -254,7 +263,7 @@ logger_kwargs = {
                      "entity": WANDB_ENTITY, 
                      "name": f"DIP_{args.method}_{args.model_inp}_{args.random_seed}",
                      "mode": "online" if args.use_wandb else "disabled",
-                     "settings": wandb.Settings(start_method="fork", code_dir="wandb"),
+                     "settings": wandb.Settings(code_dir="wandb"),
                      "dir": "wandb_logs",
                      "config": vars(args),},
 }
@@ -292,6 +301,27 @@ elif args.method == "tv":
                          save_dir=save_dir)
 
     x_pred, psnr_list, loss_list = dip.train(ray_trafo, y, z, x_gt=x)
+elif args.method == "dip_lbfgs":
+    dip = DeepImagePriorLBFGS(model=model, 
+                         lr=args.lr, 
+                         num_steps=args.num_steps, 
+                         noise_std=args.noise_std, 
+                         tv_strength=args.tv_strength,
+                         callbacks=callbacks,
+                         save_dir=save_dir)
+
+    x_pred, psnr_list, loss_list = dip.train(ray_trafo, y, z, x_gt=x)
+elif args.method == "edip_tv":
+    model.load_state_dict(torch.load(args.pretrained_path))
+    dip = DeepImagePriorTV(model=model, 
+                         lr=args.lr, 
+                         num_steps=args.num_steps, 
+                         noise_std=args.noise_std, 
+                         tv_strength=args.tv_strength,
+                         callbacks=callbacks,
+                         save_dir=save_dir)
+
+    x_pred, psnr_list, loss_list = dip.train(ray_trafo, y, z, x_gt=x)
 elif args.method == "aseq":
     dip = AutoEncodingSequentialDeepImagePrior(model=model, 
                          lr=args.lr, 
@@ -311,6 +341,16 @@ elif args.method == "selfguided":
     x_pred, psnr_list, loss_list = dip.train(ray_trafo, y, z, x_gt=x, logger_kwargs=logger_kwargs,
                          num_noise_realisations=args.num_noise_realisations,
                          exp_weight=args.exp_weight)    
+elif args.method == "edip":
+    model.load_state_dict(torch.load(args.pretrained_path))
+    dip = DeepImagePrior(model=model, 
+                         lr=args.lr, 
+                         num_steps=args.num_steps, 
+                         noise_std=args.noise_std, 
+                         callbacks=callbacks,
+                         save_dir=save_dir)
+    
+    x_pred, psnr_list, loss_list = dip.train(ray_trafo, y, z, x_gt=x)
 else:
     raise NotImplementedError
 

@@ -59,7 +59,7 @@ Alternatively, download the pre-computed matrix directly from [Zenodo](https://z
 Run DIP reconstruction with default settings:
 
 ```bash
-python 
+python run_dip.py --method vanilla --model_inp random
 ```
 
 ### Available Methods
