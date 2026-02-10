@@ -64,9 +64,12 @@ class AutoEncodingSequentialDeepImagePrior(BaseDeepImagePrior):
         loss = mse_loss + self.denoise_strength * loss_scaling * denoise_loss
         return loss, mse_loss  # TODO: report the reg loss if it exists?
 
-    def train(self, ray_trafo, y, x_in, x_gt=None, return_metrics=True, logger= None, **kwargs):
+    def train(
+        self, ray_trafo, y, x_in, x_gt=None, return_metrics=True, logger=None, **kwargs
+    ):
         if logger is None:
             from ..logging import NullLogger
+
             logger = NullLogger()
 
         num_steps = kwargs.get("num_steps", getattr(self, "num_steps", 1000))
@@ -93,11 +96,11 @@ class AutoEncodingSequentialDeepImagePrior(BaseDeepImagePrior):
         for i in (
             pbar := tqdm(
                 range(num_steps // num_inner_steps),
-                desc="Training SeqDIP",
+                desc="AutoEncoding-Sequential-DIP",
                 dynamic_ncols=True,
             )
         ):
-            self.model.train()
+
             for j in range(num_inner_steps):
                 global_step = i * num_inner_steps + j
 
@@ -119,27 +122,31 @@ class AutoEncodingSequentialDeepImagePrior(BaseDeepImagePrior):
 
                 pbar.set_description(desc)
                 logger.log(log_data, step=global_step)
-                logger.log_img(
-                    x_pred, step=global_step
-                )  
+
                 loss.backward()
-                torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
+                torch.nn.utils.clip_grad_norm_(
+                    self.model.parameters(), max_norm=1.0
+                )  # keep?
                 optim.step()
-
-                if x_gt is not None:
-                    psnr_list.append(PSNR(x_gt, x_pred))
-                loss_list.append(log_data["loss"])
-                for cb in self.callbacks:
-                    cb(global_step, x_pred, loss, mse_loss, psnr_list[-1])
-
-                logger.log({"psnr": psnr_list[-1]}, step=global_step)
 
             self.model.eval()
             with torch.no_grad():
                 z = self.model(z).detach()
 
-            
+            if x_gt is not None:
+                psnr_list.append(PSNR(x_gt, x_pred))
+            loss_list.append(log_data["loss"])
+            for cb in self.callbacks:
+                cb(global_step + 1, x_pred, loss, mse_loss, psnr_list[-1])
+            logger.log_img(
+                x_pred,
+                step=global_step,
+                title=f"Step {global_step:05d}"
+                if x_gt is None
+                else f"Step {global_step+1}, PSNR: {psnr_list[-1]:.2f}",
+            )
 
+            logger.log({"psnr": psnr_list[-1]}, step=global_step)
 
         if logger.use_wandb:
             logger.finish()
