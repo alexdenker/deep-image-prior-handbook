@@ -62,3 +62,4 @@ class BaseDeepImagePrior():
             return x_out, psnr_list, loss_list
         else:
             return x_out
+

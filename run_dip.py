@@ -7,7 +7,8 @@ from PIL import Image
 import argparse 
 from datetime import datetime
 import wandb
-from dip import (DeepImagePrior, DeepImagePriorHQS, DeepImagePriorTV, AutoEncodingSequentialDeepImagePrior, SelfGuidanceDeepImagePrior, DeepImagePriorLBFGS,
+from dip import (DeepImagePrior, DeepImagePriorHQS, DeepImagePriorTV, AutoEncodingSequentialDeepImagePrior, 
+                 SelfGuidanceDeepImagePrior, DeepImagePriorLBFGS, StochasticDeepImagePrior,
                 get_unet_model, get_walnut_data, get_walnut_2d_ray_trafo, 
                 dict_to_namespace,
                 track_best_psnr_output, save_images, early_stopping)
@@ -19,7 +20,7 @@ parser = argparse.ArgumentParser(description="Run DIP")
 parser.add_argument("--method",
                     type=str,
                     default="vanilla", 
-                    choices=["vanilla", "tv_hqs", "tv", "aseq", "selfguided", "edip", "edip_tv", "dip_lbfgs"],
+                    choices=["vanilla", "tv_hqs", "tv", "aseq", "selfguided", "edip", "edip_tv", "dip_lbfgs", "dip_sgd"],
                     help="DIP method to use")
 
 parser.add_argument("--model_inp", 
@@ -85,6 +86,11 @@ elif base_args.method == "edip":
     parser.add_argument("--pretrained_path", 
                         type=str,
                         default="pretrained_model/epoch_8_nn_learned_params.pt")
+elif base_args.method == "dip_sgd":
+    parser.add_argument("--batch_size", 
+                        type=int, 
+                        default=512,
+                        help="Batch size (number of rows) for the stochastic DIP")
 elif base_args.method == "edip_tv":
     parser.add_argument("--pretrained_path", 
                         type=str,
@@ -347,6 +353,16 @@ elif args.method == "edip":
                          lr=args.lr, 
                          num_steps=args.num_steps, 
                          noise_std=args.noise_std, 
+                         callbacks=callbacks,
+                         save_dir=save_dir)
+    
+    x_pred, psnr_list, loss_list = dip.train(ray_trafo, y, z, x_gt=x)
+elif args.method == "dip_sgd":
+    dip = StochasticDeepImagePrior(model=model, 
+                         lr=args.lr, 
+                         num_steps=args.num_steps, 
+                         noise_std=args.noise_std, 
+                         batch_size=args.batch_size,
                          callbacks=callbacks,
                          save_dir=save_dir)
     

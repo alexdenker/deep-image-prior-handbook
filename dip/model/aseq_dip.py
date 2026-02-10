@@ -97,7 +97,7 @@ class AutoEncodingSequentialDeepImagePrior(BaseDeepImagePrior):
                 dynamic_ncols=True,
             )
         ):
-
+            self.model.train()
             for j in range(num_inner_steps):
                 global_step = i * num_inner_steps + j
 
@@ -121,21 +121,25 @@ class AutoEncodingSequentialDeepImagePrior(BaseDeepImagePrior):
                 logger.log(log_data, step=global_step)
                 logger.log_img(
                     x_pred, step=global_step
-                )  # TODO: decide if this should be here or in the outer loop (where psnr is)
+                )  
                 loss.backward()
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
                 optim.step()
+
+                if x_gt is not None:
+                    psnr_list.append(PSNR(x_gt, x_pred))
+                loss_list.append(log_data["loss"])
+                for cb in self.callbacks:
+                    cb(global_step, x_pred, loss, mse_loss, psnr_list[-1])
+
+                logger.log({"psnr": psnr_list[-1]}, step=global_step)
 
             self.model.eval()
             with torch.no_grad():
                 z = self.model(z).detach()
 
-            if x_gt is not None:
-                psnr_list.append(PSNR(x_gt, x_pred))
-            loss_list.append(log_data["loss"])
-            for cb in self.callbacks:
-                cb(i, x_pred, loss, mse_loss, psnr_list[-1])
+            
 
-            logger.log({"psnr": psnr_list[-1]}, step=global_step)
 
         if logger.use_wandb:
             logger.finish()
