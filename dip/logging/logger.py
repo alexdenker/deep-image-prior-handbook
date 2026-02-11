@@ -13,26 +13,45 @@ except ImportError:
 import matplotlib.pyplot as plt
 
 class NullLogger:
-    def __init__(self, console_printing=False, image_path: Optional[Path]=None):
-        self.console_printing = console_printing
-        self.image_logging = 200
+    def __init__(self, console_printing=False, image_path: Optional[Path]=None, image_logging: Optional[bool]=False, show_images: bool=False):
+        self.image_logging = image_logging
+        self.image_skip = 200
         self.image_path = image_path
+        self.use_wandb = False
+        self.show_images = show_images
 
+        logging.basicConfig(
+            filename=Path("logs") / f"log_{datetime.now():%Y-%m-%d_%H-%M-%S}.log",
+            level=logging.INFO,
+            format="%(asctime)s | %(levelname)s | %(message)s",
+            datefmt="%d-%m-%Y %H:%M:%S",
+            force=True
+        )
+        self.logger = logging.getLogger()
+        if console_printing and not any(isinstance(h, logging.StreamHandler) for h in self.logger.handlers):
+            console_handler = logging.StreamHandler()
+            console_handler.setFormatter(logging.Formatter(
+                "%(asctime)s | %(levelname)s | %(message)s",
+                datefmt="%d-%m-%Y %H:%M:%S"
+            ))
+            self.logger.addHandler(console_handler)
     def log(self, data, step=None):
-        if not self.console_printing:
-            return
-
-        formatted_data = []
+        msg_parts = [f"Step {step:04d}"] if step is not None else []
+        field_width = 15
+        
         for k, v in data.items():
             if isinstance(v, (float, np.floating)):
-                formatted_data.append(f"{k}: {v:.4f}")
+                item_str = f"{k}: {v:.4f}"
             else:
-                formatted_data.append(f"{k}: {v}")                
-        desc = f"Step {step} | " + " | ".join(formatted_data)
-        print(desc)
+                item_str = f"{k}: {v}"
+            
+            msg_parts.append(item_str.ljust(field_width))
+        msg = " | ".join(msg_parts)
+        self.logger.info(msg)
 
     def log_img(self, img, step=None, title=None):
-        if self.image_logging is None or (step+1) % self.image_logging != 0:
+        # maybe dont do anything here and just rely on the callback?
+        if not self.image_logging or (step+1) % self.image_skip != 0:
             return
 
         if isinstance(img, torch.Tensor):
@@ -55,20 +74,21 @@ class NullLogger:
             np_img = np.clip(np_img, 0, 255).astype(np.uint8)
             
         img_pil = Image.fromarray(np_img)
-        if self.image_path is None:
-            plt.imshow(img_pil, cmap="gray" if tensor.ndim == 2 else None)
-            plt.title(title if title is not None else f"Step {step}")
-            plt.axis("off")
-            plt.show()
-        else:
+        if (self.image_path is None) and (self.show_images):
+                plt.imshow(img_pil, cmap="gray" if tensor.ndim == 2 else None)
+                plt.title(title if title is not None else f"Step {step}")
+                plt.axis("off")
+                plt.show()
+        elif self.image_path is not None:
             save_dir = Path(self.image_path)
             save_dir.mkdir(parents=True, exist_ok=True)
             save_path = save_dir / f"reconstruction_{step:04d}.png"
             img_pil.save(save_path)
 
 class FlexibleLogger:
-    def __init__(self, use_wandb: bool = False, project: Optional[str] = None, wandb_config: Optional[dict] = None, console_printing: bool=True, log_file: Optional[Path]=None, image_logging: Optional[int]=None, image_path: Optional[Path]=None):
+    def __init__(self, use_wandb: bool = False, project: Optional[str] = None, wandb_config: Optional[dict] = None, console_printing: bool=True, log_file: Optional[Path]=None, image_logging: Optional[int]=None, image_path: Optional[Path]=None, show_images: bool=False):
         self.use_wandb = use_wandb and wandb is not None
+        self.show_images = show_images
         if self.use_wandb:
             wandb.init(project=project, config=wandb_config)
             wandb.run.name = wandb_config["name"] if "name" in wandb_config else f"run_{datetime.now():%Y-%m-%d_%H-%M-%S}"
@@ -100,7 +120,7 @@ class FlexibleLogger:
         if self.use_wandb:
             wandb.log(data, step=step)
 
-        field_width = 25
+        field_width = 15
         msg = f"Step {step:04d} | " if step is not None else ""
         msg += " | ".join(
             f"{k}: {v:.4f}".ljust(field_width) if isinstance(v, float) else f"{k}: {v}".ljust(field_width)
