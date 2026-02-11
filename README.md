@@ -29,12 +29,10 @@ This repository provides implementations of several DIP variants:
 To get started, clone the repository and install
 
 ```bash
-# Create conda environment
-conda env create -f environment.yml
-
-# Activate environment
-conda activate dip-handbook
+pip install -e .
 ```
+
+This will install all the necessary packages in your current enviroment.
 
 ## Data
 
