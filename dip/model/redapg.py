@@ -43,8 +43,10 @@ class DeepImagePriorREDAPG(BaseDeepImagePrior):
         # loss_scaling = self.loss_scaling if hasattr(self, "loss_scaling") else 1.0
         mixing_L = self.mixing_L if hasattr(self, "mixing_L") else 1.0
         L2_inv = self.L2_inv if hasattr(self, "L2_inv") else kwargs.get("L2_inv", 1.0)
+
         mse_loss = ((ray_trafo.trafo(x_pred) - y).pow(2)).sum() * L2_inv
         denoise_loss = torch.mean((x_pred - u) ** 2)
+
         loss = mse_loss + mixing_L * self.denoise_strength * denoise_loss
         return loss, mse_loss
 
@@ -63,40 +65,42 @@ class DeepImagePriorREDAPG(BaseDeepImagePrior):
 
             logger = NullLogger()
 
-        optim = torch.optim.Adam(self.model.parameters(), lr=self.lr)
+        num_steps = kwargs.get("num_steps", getattr(self, "num_steps", 1000))
+        num_inner_steps = kwargs.get(
+            "num_inner_steps", getattr(self, "num_inner_steps", 10)
+        )
 
-        psnr_list = []
-        loss_list = []
-
+        exp_weight = kwargs.get("exp_weight", getattr(self, "exp_weight", 0.0))
+        
         u = torch.zeros_like(x_in)
         previous_xpred = torch.zeros_like(x_in)
         self.mixing_L = kwargs.get("mixing_weight", 1.0)
-        # decreasing sequence
-        # At the beginning we want a strong regularisation and gradually decrease it
-        # tv_reg = np.logspace(np.log10(self.tv_max), np.log10(self.tv_min), self.num_steps // self.num_inner_steps)[::-1]
 
         self.L = kwargs.get("L")
         if self.L is None:
             with torch.no_grad():
                 self.L = power_iteration(ray_trafo, torch.rand_like(x_in).view(-1, 1))
         self.L2_inv = 1.0 / self.L ** 2
+        t_old = 1.0
 
         # psnr_fun = MaskedPSNR(x_in.shape[2])
         im_size = x_in.shape[-1]
         psnr_fun = MaskedPSNR(im_size=im_size, mask_fn=create_circular_mask)
+        psnr_list, loss_list = [], []
 
+        optim = torch.optim.Adam(self.model.parameters(), lr=self.lr)
         self.model.train()
-        t_old = 1.0
+
         for i in (
             pbar := tqdm(
-                range(self.num_steps // self.num_inner_steps),
+                range(num_steps // num_inner_steps),
                 desc="RED-APG DIP",
                 dynamic_ncols=True,
             )
         ):
 
-            for j in range(self.num_inner_steps):
-                global_step = i * self.num_inner_steps + j
+            for j in range(num_inner_steps):
+                global_step = i * num_inner_steps + j
                 optim.zero_grad()
 
                 x_pred = self.model(x_in)
@@ -111,6 +115,7 @@ class DeepImagePriorREDAPG(BaseDeepImagePrior):
                 )
                 logger.log(log_data, step=global_step)
                 loss.backward()
+
                 torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
                 optim.step()
                 loss_list.append(mse_loss.item())
@@ -119,7 +124,7 @@ class DeepImagePriorREDAPG(BaseDeepImagePrior):
                 x_pred = self.model(x_in)
                 t_new = (
                     (1.0 + np.sqrt(1.0 + 4.0 * t_old ** 2)) / 2.0
-                    if (i * self.num_inner_steps + j) > 0
+                    if global_step > 0
                     else 1.0
                 )
 
@@ -133,6 +138,8 @@ class DeepImagePriorREDAPG(BaseDeepImagePrior):
 
             if x_gt is not None:
                 psnr_list.append(psnr_fun(x_gt, x_pred))
+                logger.log({"psnr": psnr_list[-1] if psnr_list else None}, step=global_step)
+
             logger.log_img(
                 x_pred,
                 step=global_step,
@@ -141,9 +148,15 @@ class DeepImagePriorREDAPG(BaseDeepImagePrior):
                 else f"Step {global_step+1}, PSNR: {psnr_list[-1]:.2f}",
             )
 
-            logger.log({"psnr": psnr_list[-1]}, step=global_step)
+            desc_parts = [f"{i:04d}"]
+            desc_parts += [f"{k}: {v:.4f}" for k, v in log_data.items()]
+            if psnr_list:
+                desc_parts.append(f"PSNR: {psnr_list[-1]:.2f}")
+            desc = " | ".join(desc_parts)
+            pbar.set_description(desc)
+
             for cb in self.callbacks:
-                cb(i, x_pred, loss, mse_loss, psnr_list[-1])
+                cb(i, x_pred, loss, mse_loss, psnr_list[-1] if psnr_list else None)
 
         self.model.eval()
         with torch.no_grad():
