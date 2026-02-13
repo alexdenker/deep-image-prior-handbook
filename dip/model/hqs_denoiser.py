@@ -44,11 +44,11 @@ class DeepImagePriorHQSDenoiser(BaseDeepImagePrior):
 
     def compute_loss(self, x_pred, ray_trafo, y, u, **kwargs):
         L2_inv = self.L2_inv if hasattr(self, "L2_inv") else kwargs.get("L2_inv", 1.0)
-        beta = self.beta if hasattr(self, "beta") else kwargs.get("beta", 1.0)
+        beta = self.beta if hasattr(self, "beta") else kwargs.get("beta", 1.0) 
         loss_scaling = self.loss_scaling if hasattr(self, "loss_scaling") else 1.0
         
         mse_loss = ((ray_trafo.trafo(x_pred) - y).pow(2)).sum() * L2_inv
-        denoise_loss = torch.mean((x_pred - u) ** 2)
+        denoise_loss = torch.mean((x_pred - u) ** 2) #TODO: this in principle should not be the mean but the sum, so should make consistent
 
         loss = mse_loss + beta * loss_scaling * denoise_loss
         return loss, mse_loss

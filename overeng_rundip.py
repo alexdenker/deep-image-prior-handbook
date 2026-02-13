@@ -140,7 +140,7 @@ def parse_arguments():
             default=10,
             help="Number of inner optimisation steps",
         )
-    #TODO: merge these two if statements (have just denoise strength)
+
     if base_args.method in ["selfguided", "aseq", "reddip", "apgda_denoiser", "redapg", "admm_denoiser"]:
         parser.add_argument(
             "--denoise_strength",
@@ -148,24 +148,35 @@ def parse_arguments():
             default=0.01,
             help="Denoising strength for the denoising prior",
         )
-    if base_args.method in ["tv", "weighted_tv"]:
+    if base_args.method in ["tv", "weighted_tv", "redapg"]:
+        if base_args.method in ["tv", "weighted_tv"]:
+            default_reg_strength = 1e-5
+        else:  # "redapg"
+            default_reg_strength = None  # will be set to denoise_strength / numel in the REDAPG class if not provided
         parser.add_argument(
-            "--tv_strength",
+            "--regularization_strength",
             type=float,
-            default=1e-5,
-            help="TV strength for the TV prior",
+            default=default_reg_strength,
+            help="Regularization strength for the regularization prior",
         )
-
-    if base_args.method == "tv_hqs":
-        parser.add_argument("--splitting_strength", type=float, default=0.5)
-        parser.add_argument("--tv_min", type=float, default=0.5) # this and reg_min, reg_max are the same 
-        parser.add_argument("--tv_max", type=float, default=1e-2)
-    elif base_args.method == "hqs_denoiser":
-        parser.add_argument("--splitting_strength", type=float, default=60.0)
+    
+    if base_args.method in ["tv_hqs", "hqs_denoiser"]:
+        if base_args.method == "tv_hqs":
+            default_splitting = 0.5
+        else:  # "hqs_denoiser"
+            default_splitting = 60.0
+        parser.add_argument(
+            "--splitting_strength",
+            type=float,
+            default=default_splitting,
+        )
+        # Shared default schedule
         parser.add_argument("--reg_min", type=float, default=0.5)
         parser.add_argument("--reg_max", type=float, default=1e-2)
-    elif base_args.method == "redapg":
-            parser.add_argument("--mixing_weight", type=float, default=1.0)
+
+    if base_args.method == "redapg":
+        parser.add_argument("--mixing_weight", type=float, default=1.2)
+
     elif base_args.method == "selfguided":
         parser.add_argument(
             "--num_noise_realisations",
@@ -199,9 +210,9 @@ def get_reg_strength(args):
     if args.method in  ["selfguided", "aseq", "reddip", "apgda_denoiser", "redapg", "admm_denoiser"]:
         reg["denoise_strength"] = args.denoise_strength
 
-    # TV-based methods
-    if args.method in ["tv", "weighted_tv"]:
-        reg["tv_strength"] = args.tv_strength
+    if args.method in ["redapg", "weighted_tv", "tv"]:
+        reg["regularization_strength"] = args.regularization_strength if hasattr(args, "regularization_strength") else None
+    # call this the regularization strength for the splitting-based methods, since it is not necessarily a denoising strength, it is the weight of the regularization term in the loss
 
     # Splitting-based methods
     if args.method in ['tv_hqs', 'hqs_denoiser']:
@@ -263,7 +274,7 @@ def make_paths_and_logger(args):
 
     suffix = f"{args.model_inp}_{args.lr}{suffix}" if use_inp_and_lr else suffix
     # --- Paths ---
-    base_path = f"results_hqs/{args.method}/{suffix}/run_{time_now}"
+    base_path = f"results/paper/{args.method}/{suffix}/run_{time_now}"
     # base_path = f"results/{args.method}/{args.model_inp}_{args.lr}{suffix}/run_{time_now}"
     paths = {
         "base": base_path,
@@ -433,8 +444,8 @@ def run_dip(args, logger=None, paths=None):
             num_steps=args.num_steps,
             noise_std=args.noise_std,
             splitting_strength=args.splitting_strength,
-            tv_min=args.tv_min,
-            tv_max=args.tv_max,
+            tv_min=args.reg_min,
+            tv_max=args.reg_max,
             inner_steps=args.num_inner_steps,
             callbacks=callbacks,
         )
@@ -492,19 +503,20 @@ def run_dip(args, logger=None, paths=None):
             num_inner_steps=args.num_inner_steps,
             noise_std=args.noise_std,
             denoise_strength=args.denoise_strength,
+            regularization_strength=args.regularization_strength,
             denoiser=denoiser,
             device=device,
             callbacks=callbacks,
         )
 
-        x_pred, psnr_list, loss_list = dip.train(ray_trafo, y, z, x_gt=x)
+        x_pred, psnr_list, loss_list = dip.train(ray_trafo, y, z, x_gt=x, exp_weight=args.exp_weight)
     elif args.method == "tv":
         dip = DeepImagePriorTV(
             model=model,
             lr=args.lr,
             num_steps=args.num_steps,
             noise_std=args.noise_std,
-            tv_strength=args.tv_strength,
+            tv_strength=args.regularisation_strength,
             callbacks=callbacks,
         )
 
@@ -553,7 +565,7 @@ def run_dip(args, logger=None, paths=None):
             lr=args.lr,
             num_steps=args.num_steps,
             noise_std=args.noise_std,
-            tv_strength=args.tv_strength,
+            tv_strength=args.regularisation_strength,
             variable_regularisation=args.variable_regularisation,
             callbacks=callbacks,
         )
@@ -611,10 +623,12 @@ def run_dip(args, logger=None, paths=None):
     Image.fromarray(img).save(os.path.join(paths["imgs"], "Best_Reconstruction.png"))
 
     results = {}
-    results["psnrs"] = psnr_list
-    results["loss"] = loss_list
+    results["psnrs"] = [float(x) for x in psnr_list]
+    results["loss"] = [float(x) for x in loss_list]
     results["best_psnr"] = float(best_psnr["value"])
     results["best_psnr_idx"] = int(best_psnr["index"])
+    results["final_psnr"] = results["psnrs"][-1]
+    
     if best_psnr_early_stopping['reco'] is not None:
         img = best_psnr_early_stopping['reco'][0,0].numpy() * 255
         img = img.astype(np.uint8)
@@ -638,11 +652,11 @@ def run_dip(args, logger=None, paths=None):
     steps = np.arange(1, len(psnr_list) + 1)
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4))
 
-    ax1.plot(steps, psnr_list)
+    ax1.plot(psnr_list)
     ax1.set(xscale="log", title="PSNR", xlabel="Step", ylabel="PSNR (dB)")
     ax1.grid(True)
 
-    ax2.plot(steps, loss_list)
+    ax2.plot(loss_list)
     ax2.set(
         xscale="log", yscale="log", title="Loss (log)", xlabel="Step", ylabel="Loss"
     )

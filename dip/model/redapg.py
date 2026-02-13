@@ -22,12 +22,13 @@ class DeepImagePriorREDAPG(BaseDeepImagePrior):
         device=None,
         callbacks=None,
         save_dir=None,
+        regularization_strength=None,
     ):
         super().__init__(model, lr, num_steps, noise_std, callbacks, save_dir)
 
         self.num_inner_steps = num_inner_steps
         self.denoise_strength = denoise_strength
-        # breakpoint()
+        self.regularization_strength = regularization_strength
 
         if denoiser is None or denoiser == "tv":
             reg_denoiser = dinv.optim.prior.TVPrior(n_it_max=100)
@@ -40,14 +41,13 @@ class DeepImagePriorREDAPG(BaseDeepImagePrior):
         self.name = "REDAPG_DIP"
 
     def compute_loss(self, x_pred, ray_trafo, y, u, **kwargs):
-        # loss_scaling = self.loss_scaling if hasattr(self, "loss_scaling") else 1.0
         mixing_L = self.mixing_L if hasattr(self, "mixing_L") else 1.0
         L2_inv = self.L2_inv if hasattr(self, "L2_inv") else kwargs.get("L2_inv", 1.0)
 
         mse_loss = ((ray_trafo.trafo(x_pred) - y).pow(2)).sum() * L2_inv
-        denoise_loss = torch.mean((x_pred - u) ** 2)
+        denoise_loss = 0.5 * (x_pred - u).pow(2).sum()
 
-        loss = mse_loss + mixing_L * self.denoise_strength * denoise_loss
+        loss = mse_loss + mixing_L * self.regularization_strength * denoise_loss
         return loss, mse_loss
 
     def train(
@@ -69,11 +69,13 @@ class DeepImagePriorREDAPG(BaseDeepImagePrior):
         num_inner_steps = kwargs.get(
             "num_inner_steps", getattr(self, "num_inner_steps", 10)
         )
-
+        if self.regularization_strength is None: self.regularization_strength = self.denoise_strength / x_in.numel()
+        print(f"Using regularization strength {self.regularization_strength:.4e}, self.denoise_strength: {self.denoise_strength:.4e}, numel: {x_in.numel()}")
         exp_weight = kwargs.get("exp_weight", getattr(self, "exp_weight", 0.0))
         
         u = torch.zeros_like(x_in)
         previous_xpred = torch.zeros_like(x_in)
+        output_img = x_in.clone().detach()
         self.mixing_L = kwargs.get("mixing_weight", 1.0)
 
         self.L = kwargs.get("L")
@@ -135,9 +137,12 @@ class DeepImagePriorREDAPG(BaseDeepImagePrior):
                 )
                 previous_xpred = x_pred.clone()
                 t_old = t_new
+                output_img = (
+                    exp_weight * output_img + (1 - exp_weight) * x_pred.detach()
+                )
 
             if x_gt is not None:
-                psnr_list.append(psnr_fun(x_gt, x_pred))
+                psnr_list.append(psnr_fun(x_gt, output_img))
                 logger.log({"psnr": psnr_list[-1] if psnr_list else None}, step=global_step)
 
             logger.log_img(
@@ -161,6 +166,7 @@ class DeepImagePriorREDAPG(BaseDeepImagePrior):
         self.model.eval()
         with torch.no_grad():
             x_out = self.model(x_in)
+            x_out = exp_weight * output_img + (1 - exp_weight) * x_out.detach()
 
         if logger.use_wandb:
             logger.finish()

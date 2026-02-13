@@ -49,9 +49,9 @@ class DeepImagePriorADMMDenoiser(BaseDeepImagePrior):
         beta = self.beta if hasattr(self, "beta") else beta
 
         mse_loss = ((ray_trafo.trafo(x_pred) - y).pow(2)).sum() * L2_inv
-        denoise_loss = torch.mean((x_pred - u + lagrangian) ** 2)
+        denoise_loss = ((x_pred - u + lagrangian) ** 2).sum()
 
-        loss = mse_loss + beta * 0.5 * denoise_loss
+        loss = mse_loss + 0.5 * denoise_loss * self.beta
         return loss, mse_loss
 
     def train(
@@ -76,8 +76,7 @@ class DeepImagePriorADMMDenoiser(BaseDeepImagePrior):
 
         exp_weight = kwargs.get("exp_weight", getattr(self, "exp_weight", 0))
 
-        self.beta = kwargs.get("admm_weight", 10.0)
-        
+        self.beta = kwargs.get("admm_weight", 10.0) / x_in.numel()
         self.L = kwargs.get("L")
         if self.L is None:
             with torch.no_grad():
