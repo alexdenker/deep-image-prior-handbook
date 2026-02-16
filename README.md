@@ -63,11 +63,14 @@ python run_dip.py --method vanilla --model_inp random
 ### Available Methods
 
 ```bash
-# Vanilla DIP
-python 
+# Vanilla DIP (with random input)
+python run_dip.py --method vanilla --model_inp random
+
+# Vanilla DIP (with FBP input)
+python run_dip.py --method vanilla --model_inp fbp
 
 # DIP with Total Variation (autodiff)
-python 
+python run_dip.py --method tv --model_inp fbp
 
 # DIP with TV using Half-Quadratic Splitting
 python 

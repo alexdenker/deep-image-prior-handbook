@@ -30,85 +30,6 @@ class DeepImagePriorTV(BaseDeepImagePrior):
         loss = mse_loss + self.tv_strength * tv_loss(x_pred)
         return loss, mse_loss
 
-
-class DeepImagePriorLBFGS(BaseDeepImagePrior):
-    def __init__(
-        self,
-        model,
-        lr,
-        num_steps,
-        tv_strength,
-        noise_std=0.0,
-        callbacks=None,
-        save_dir=None,
-    ):
-        super().__init__(model, lr, num_steps, noise_std, callbacks, save_dir)
-
-        self.tv_strength = tv_strength
-
-    def compute_loss(self, x_pred, ray_trafo, y, **kwargs):
-        L = kwargs.get("L", 1.0)
-        mse_loss = torch.sum((ray_trafo.trafo(x_pred) - y) ** 2 / L ** 2)
-        loss = mse_loss + self.tv_strength * tv_loss(x_pred)
-        return loss, mse_loss
-
-    def train(self, ray_trafo, y, x_in, x_gt=None, return_metrics=True, **kwargs):
-
-        optim = torch.optim.LBFGS(
-            self.model.parameters(),
-            lr=self.lr,
-            max_iter=1,
-            line_search_fn="strong_wolfe",
-        )
-
-        psnr_list, loss_list = [], []
-
-        with torch.no_grad():
-            L = power_iteration(ray_trafo, torch.rand_like(x_in).view(-1, 1))
-
-        psnr_fun = MaskedPSNR(x_in.shape[2])
-
-        self.model.train()
-        for i in tqdm(range(self.num_steps)):
-
-            def closure():
-                optim.zero_grad()
-                noise = (
-                    self.noise_std ** 2 * torch.randn_like(x_in)
-                    if self.noise_std > 0
-                    else 0
-                )
-                x_pred = self.model(x_in + noise)
-                loss, mse_loss = self.compute_loss(x_pred, ray_trafo, y, L=L)
-                loss.backward()
-                return loss
-
-            loss = optim.step(closure)
-
-            # recompute for logging
-            with torch.no_grad():
-                x_pred = self.model(x_in)
-                _, mse_loss = self.compute_loss(x_pred, ray_trafo, y, L=L)
-                loss_list.append(mse_loss.item())
-            if x_gt is not None:
-                psnr = psnr_fun(x_gt, x_pred)
-                psnr_list.append(psnr)
-            else:
-                psnr_list.append(0)
-
-            for cb in self.callbacks:
-                cb(i, x_pred, loss, mse_loss, psnr_list[-1])
-
-        self.model.eval()
-        with torch.no_grad():
-            x_out = self.model(x_in)
-
-        if return_metrics:
-            return x_out, psnr_list, loss_list
-        else:
-            return x_out
-
-
 class DeepImagePriorHQS(BaseDeepImagePrior):
     def __init__(
         self,
@@ -131,7 +52,7 @@ class DeepImagePriorHQS(BaseDeepImagePrior):
         self.inner_steps = inner_steps
         self.name = "TV_HQS_DIP"
 
-    def train(self, ray_trafo, y, x_in, x_gt=None, return_metrics=True):
+    def train(self, ray_trafo, y, x_in, x_gt=None, return_metrics=True, logger=None):
         """
         Training the DIP.
 
@@ -194,7 +115,6 @@ class DeepImagePriorHQS(BaseDeepImagePrior):
                     ]
                 )
                 logger.log(log_data, step=global_step)
-                loss.backward()
                 loss.backward()
 
                 torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)

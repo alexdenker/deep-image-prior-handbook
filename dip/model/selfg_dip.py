@@ -93,9 +93,9 @@ class SelfGuidanceDeepImagePrior(BaseDeepImagePrior):
 
 
     def train(self, ray_trafo, y, x_in, x_gt=None, return_metrics=True, logger = None, **kwargs):
-        if logger is None:
-            from ..logging import NullLogger
-            logger = NullLogger()
+        #if logger is None:
+        #    from ..logging import NullLogger
+        #    logger = NullLogger()
         num_steps = kwargs.get("num_steps", getattr(self, "num_steps", 1000))
         self.num_noise_realisations = kwargs.get(
             "num_noise_realisations", getattr(self, "num_noise_realisations", 4)
@@ -191,14 +191,14 @@ class SelfGuidanceDeepImagePrior(BaseDeepImagePrior):
                 f"{k}: {v:.4f}" for k, v in log_data.items()
             )
             pbar.set_description(desc)
-            logger.log(log_data, step=i)
-            logger.log_img(exp_average, step=i, title=f"Step {i:04d} | PSNR: {psnr_list[-1]:.2f}" if psnr_list else None)
+            #logger.log(log_data, step=i)
+            #logger.log_img(exp_average, step=i, title=f"Step {i:04d} | PSNR: {psnr_list[-1]:.2f}" if psnr_list else None)
 
             for cb in self.callbacks:
                 cb(i, x_pred, loss, mse_loss, psnr_list[-1])
 
-        if logger.use_wandb:
-            logger.finish()
+        #if logger.use_wandb:
+        #    logger.finish()
 
         if return_metrics:
             return exp_average, psnr_list, loss_list

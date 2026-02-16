@@ -106,9 +106,17 @@ class MatmulRayTrafo(BaseRayTrafo):
         raise ValueError('`angles` was not set for `MatmulRayTrafo`')
 
     def trafo_flat(self, x: Tensor) -> Tensor:
+        """
+        Apply the ray transform to a flattened image vector `x` of shape `(np.prod(im_shape),)`.
+        
+        x: Tensor of shape `(np.prod(im_shape),)`, representing a flattened image.
+        
+        """
+
         if self.resize is not None:
            x = self.resize(x.view((x.shape[-1], 1, *self.resize.shape)), shape=self.im_shape)
            x = x.view(np.prod(self.im_shape), x.shape[0])
+
         if self.matrix.is_sparse:
             observation = torch.sparse.mm(self.matrix, x)
         else:
@@ -117,10 +125,17 @@ class MatmulRayTrafo(BaseRayTrafo):
         return observation
 
     def trafo_adjoint_flat(self, observation: Tensor) -> Tensor:
+        """
+        Apply the adjoint of the ray transform to a flattened observation vector `observation` of shape `(np.prod(obs_shape),)`.
+
+        observation: Tensor of shape `(np.prod(obs_shape),)`, representing a flattened observation.
+        """
+
         if self.matrix.is_sparse:
             x = torch.sparse.mm(self.matrix_t, observation)
         else:
             x = torch.matmul(self.matrix.T, observation)
+
         if self.resize is not None:
             x = self.resize(x.view((observation.shape[-1], 1, *self.im_shape)))
             x = x.view(np.prod(self.resize.shape), observation.shape[-1])

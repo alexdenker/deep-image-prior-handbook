@@ -5,7 +5,6 @@ from .model import (
     DeepImagePriorTV,
     SelfGuidanceDeepImagePrior,
     BaseDeepImagePrior,
-    StochasticDeepImagePrior,
     WeightedTVDeepImagePrior,
     REDDeepImagePrior,
     DeepImagePriorHQSDenoiser,
@@ -19,12 +18,12 @@ from .model import (
     track_best_psnr_output,
     save_images,
     early_stopping,
-    DeepImagePriorLBFGS,
 )
 from .dataset import (
     get_walnut_data,
     get_walnut_2d_ray_trafo,
     save_single_slice_ray_trafo_matrix,
+    get_disk_dist_ellipses_dataset
 )
 from .utils import dict_to_namespace
 from .physics import power_iteration, OperatorModule

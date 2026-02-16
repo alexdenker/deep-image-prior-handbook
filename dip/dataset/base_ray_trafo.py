@@ -9,7 +9,6 @@ from torch import nn
 from torch import Tensor
 import numpy as np
 
-
 class BaseRayTrafo(nn.Module, ABC):
     """
     Abstract base ray transform.

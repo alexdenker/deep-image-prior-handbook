@@ -7,8 +7,9 @@ from PIL import Image
 import argparse 
 from datetime import datetime
 import wandb
+import time 
 from dip import (DeepImagePrior, DeepImagePriorHQS, DeepImagePriorTV, AutoEncodingSequentialDeepImagePrior, 
-                 SelfGuidanceDeepImagePrior, DeepImagePriorLBFGS, StochasticDeepImagePrior,
+                 SelfGuidanceDeepImagePrior,
                 get_unet_model, get_walnut_data, get_walnut_2d_ray_trafo, 
                 dict_to_namespace,
                 track_best_psnr_output, save_images, early_stopping)
@@ -20,7 +21,7 @@ parser = argparse.ArgumentParser(description="Run DIP")
 parser.add_argument("--method",
                     type=str,
                     default="vanilla", 
-                    choices=["vanilla", "tv_hqs", "tv", "aseq", "selfguided", "edip", "edip_tv", "dip_lbfgs", "dip_sgd"],
+                    choices=["vanilla", "tv_hqs", "tv", "aseq", "selfguided", "edip", "edip_tv"],
                     help="DIP method to use")
 
 parser.add_argument("--model_inp", 
@@ -37,7 +38,7 @@ parser.add_argument("--phantom",
 
 parser.add_argument("--num_steps", 
                     type=int,
-                    default=3000)
+                    default=10000)
 
 parser.add_argument("--lr", 
                     type=float,
@@ -86,11 +87,8 @@ elif base_args.method == "edip":
     parser.add_argument("--pretrained_path", 
                         type=str,
                         default="pretrained_model/epoch_8_nn_learned_params.pt")
-elif base_args.method == "dip_sgd":
-    parser.add_argument("--batch_size", 
-                        type=int, 
-                        default=512,
-                        help="Batch size (number of rows) for the stochastic DIP")
+    
+
 elif base_args.method == "edip_tv":
     parser.add_argument("--pretrained_path", 
                         type=str,
@@ -98,14 +96,12 @@ elif base_args.method == "edip_tv":
     parser.add_argument("--tv_strength", 
                         type=float,
                         default=1e-5)
-elif base_args.method == "dip_lbfgs":
-    parser.add_argument("--tv_strength", 
-                        type=float,
-                        default=1e-5)
+    
 elif base_args.method == "tv":
     parser.add_argument("--tv_strength", 
                         type=float,
                         default=1e-5)
+    
 elif base_args.method == "aseq":
     parser.add_argument("--denoise_strength",
                         type=float,
@@ -115,6 +111,7 @@ elif base_args.method == "aseq":
                         type=int,
                         default=5,
                         help="Number of inner optimisation steps for the aseq DIP")
+    
 elif base_args.method == "selfguided":
     parser.add_argument("--denoise_strength",
                         type=float,
@@ -138,11 +135,11 @@ else:
 args = parser.parse_args()
 
 
-time = datetime.now().strftime("%Y%m%d_%H%M%S")
-save_dir = f"dip_results/{args.phantom}/{args.method}/{args.model_inp}/{time}"
+time_save = datetime.now().strftime("%Y%m%d_%H%M%S")
+save_dir = f"dip_results/{args.phantom}/{args.method}/{args.model_inp}/{time_save}"
 os.makedirs(save_dir, exist_ok=True)
 
-save_dir_img = f"dip_results/{args.phantom}/{args.method}/{args.model_inp}/{time}/imgs"
+save_dir_img = f"dip_results/{args.phantom}/{args.method}/{args.model_inp}/{time_save}/imgs"
 os.makedirs(save_dir_img, exist_ok=True)
 
 device = args.device
@@ -211,7 +208,6 @@ elif args.phantom == "shepplogan":
             constant_values=0)
 
     x = torch.from_numpy(x).unsqueeze(0).unsqueeze(0).float().to(cfg.device)
-    print(x.shape)
     y = ray_trafo.trafo(x) 
     g = torch.Generator(device=y.device).manual_seed(1234)
     y = y + 0.01 * torch.mean(y.abs()) * torch.randn(y.shape, generator=g, device=y.device)
@@ -240,8 +236,6 @@ else:
     g = torch.Generator()
     g.manual_seed(args.random_seed_noise)
     z = 0.1*torch.randn(x.shape, generator=g)
-
-noise_std = 0.0
 
 z = z.to(device)
 y_noise = y.to(device)
@@ -307,16 +301,7 @@ elif args.method == "tv":
                          save_dir=save_dir)
 
     x_pred, psnr_list, loss_list = dip.train(ray_trafo, y, z, x_gt=x)
-elif args.method == "dip_lbfgs":
-    dip = DeepImagePriorLBFGS(model=model, 
-                         lr=args.lr, 
-                         num_steps=args.num_steps, 
-                         noise_std=args.noise_std, 
-                         tv_strength=args.tv_strength,
-                         callbacks=callbacks,
-                         save_dir=save_dir)
 
-    x_pred, psnr_list, loss_list = dip.train(ray_trafo, y, z, x_gt=x)
 elif args.method == "edip_tv":
     model.load_state_dict(torch.load(args.pretrained_path))
     dip = DeepImagePriorTV(model=model, 
@@ -357,18 +342,11 @@ elif args.method == "edip":
                          save_dir=save_dir)
     
     x_pred, psnr_list, loss_list = dip.train(ray_trafo, y, z, x_gt=x)
-elif args.method == "dip_sgd":
-    dip = StochasticDeepImagePrior(model=model, 
-                         lr=args.lr, 
-                         num_steps=args.num_steps, 
-                         noise_std=args.noise_std, 
-                         batch_size=args.batch_size,
-                         callbacks=callbacks,
-                         save_dir=save_dir)
     
     x_pred, psnr_list, loss_list = dip.train(ray_trafo, y, z, x_gt=x)
 else:
     raise NotImplementedError
+
 
 print(best_psnr['value'], best_psnr['index'])
 
