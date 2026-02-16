@@ -3,7 +3,6 @@ import numpy as np
 from tqdm import tqdm
 from collections import OrderedDict
 from ..physics import power_iteration
-from plutils import plot_nimages
 from .utils import create_circular_mask, MaskedPSNR
 from .base_dip import BaseDeepImagePrior
 
@@ -104,13 +103,13 @@ class REDDeepImagePrior(BaseDeepImagePrior):
                 desc = f"{i}:{j:04d} | " + " | ".join(
                     f"{k}: {v:.4f}" for k, v in log_data.items()
                 )
-                plot_nimages(
-                    x_pred,
-                    titles=[
-                        f"{global_step} mse: {mse_loss.item():.4f} denoise: {(loss-mse_loss).item():.4f}"
-                    ],
-                    save_path=f"results/tmp_reddit/{global_step:05d}.png",
-                )
+                # plot_nimages(
+                #     x_pred,
+                #     titles=[
+                #         f"{global_step} mse: {mse_loss.item():.4f} denoise: {(loss-mse_loss).item():.4f}"
+                #     ],
+                #     save_path=f"results/tmp_reddit/{global_step:05d}.png",
+                # )
                 pbar.set_description(desc)
                 logger.log(log_data, step=global_step)
                 loss.backward()
