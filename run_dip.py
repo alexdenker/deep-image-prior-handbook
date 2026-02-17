@@ -72,16 +72,16 @@ base_args, remaining = parser.parse_known_args()
 if base_args.method == "tv_hqs":
     parser.add_argument("--splitting_strength", 
                         type=float, 
-                        default=60)
+                        default=1.0)
     parser.add_argument("--tv_min", 
                         type=float, 
-                        default=1e-2)
+                        default=0.5)
     parser.add_argument("--tv_max", 
                         type=float,
-                        default=0.5)
+                        default=1e-2)
     parser.add_argument("--inner_steps", 
                         type=int, 
-                        default=20)
+                        default=10)
 
 elif base_args.method == "edip":
     parser.add_argument("--pretrained_path", 
