@@ -70,10 +70,10 @@ python run_dip.py --method vanilla --model_inp random
 python run_dip.py --method vanilla --model_inp fbp
 
 # DIP with Total Variation (autodiff)
-python run_dip.py --method tv --model_inp fbp
+python run_dip.py --method tv --model_inp random
 
 # DIP with TV using Half-Quadratic Splitting
-python 
+python run_dip.py --method tv_hqs --model_inp random
 
 # Self-Guidance DIP
 python 
@@ -86,6 +86,16 @@ python
 
 If you use this code in your research, please cite:
 
+```bibtex
+@misc{arridge2026deepimagepriorcomputed,
+      title={Deep Image Prior for Computed Tomography Reconstruction}, 
+      author={Simon Arridge and Riccardo Barbano and Alexander Denker and Zeljko Kereta},
+      year={2026},
+      eprint={2602.14709},
+      archivePrefix={arXiv},
+      url={https://arxiv.org/abs/2602.14709}, 
+}
+```
 
 
 ## References
