@@ -34,13 +34,9 @@ METHODS_WITH_INNER_STEPS = [
     "admm_denoiser",
     "apgda_denoiser",
     "redapg",
-    "weighted_tv",
     "reddip",
-    "aseq"
 ]
 METHODS_WITH_DENOISER = [
-    "reddip",
-    "apgda_denoiser",
     "redapg",
     "admm_denoiser",
     "hqs_denoiser",
