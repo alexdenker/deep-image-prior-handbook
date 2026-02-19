@@ -15,11 +15,8 @@ from dip import (
     DeepImagePriorTV,
     AutoEncodingSequentialDeepImagePrior,
     SelfGuidanceDeepImagePrior,
-    WeightedTVDeepImagePrior,
-    REDDeepImagePrior,
     DeepImagePriorHQSDenoiser,
     DeepImagePriorADMMDenoiser,
-    DeepImagePriorAPGDADenoiser,
     DeepImagePriorREDAPG,
     get_unet_model,
     get_walnut_data,
@@ -58,7 +55,7 @@ def parse_arguments():
         "--method",
         type=str,
         default="vanilla",
-        choices=["vanilla", "tv_hqs", "tv", "aseq", "selfguided", "weighted_tv", "reddip", "hqs_denoiser", "admm_denoiser", "apgda_denoiser", "redapg"],
+        choices=["vanilla", "tv_hqs", "tv", "aseq", "selfguided", "hqs_denoiser", "admm_denoiser", "redapg"],
         help="DIP method to use",
     )
 
@@ -141,15 +138,15 @@ def parse_arguments():
             help="Number of inner optimisation steps",
         )
 
-    if base_args.method in ["selfguided", "aseq", "reddip", "apgda_denoiser", "redapg", "admm_denoiser"]:
+    if base_args.method in ["selfguided", "aseq", "redapg", "admm_denoiser"]:
         parser.add_argument(
             "--denoise_strength",
             type=float,
             default=0.01,
             help="Denoising strength for the denoising prior",
         )
-    if base_args.method in ["tv", "weighted_tv", "redapg"]:
-        if base_args.method in ["tv", "weighted_tv"]:
+    if base_args.method in ["tv", "redapg"]:
+        if base_args.method == "tv":
             default_reg_strength = 1e-5
         else:  # "redapg"
             default_reg_strength = None  # will be set to denoise_strength / numel in the REDAPG class if not provided
@@ -187,16 +184,6 @@ def parse_arguments():
         parser.add_argument(
             "--lr_z", type=float, default=1e-2, help="Learning rate for the input"
         )
-    elif base_args.method == "weighted_tv":
-        parser.add_argument("--variable_regularisation", type=bool, default=False, help="Use variable regularisation weights")
-    elif base_args.method == "reddip":
-        # recall what is this num_lower_steps and if its effectively the same as num_inner_steps
-        parser.add_argument(
-            "--num_lower_steps",
-            type=int,
-            default=1,
-            help="Number of lower optimisation steps for the RED DIP",
-        )
     return parser.parse_args(remaining, namespace=base_args)
 
 def get_reg_strength(args):
@@ -207,21 +194,19 @@ def get_reg_strength(args):
     reg = {}
 
     # Denoiser-based methods
-    if args.method in  ["selfguided", "aseq", "reddip", "apgda_denoiser", "redapg", "admm_denoiser"]:
+    if args.method in  ["selfguided", "aseq", "redapg", "admm_denoiser"]:
         reg["denoise_strength"] = args.denoise_strength
 
-    if args.method in ["redapg", "weighted_tv", "tv"]:
+    if args.method in ["redapg", "tv"]:
         reg["regularization_strength"] = args.regularization_strength if hasattr(args, "regularization_strength") else None
-    # call this the regularization strength for the splitting-based methods, since it is not necessarily a denoising strength, it is the weight of the regularization term in the loss
 
     # Splitting-based methods
     if args.method in ['tv_hqs', 'hqs_denoiser']:
         reg["splitting_strength"] = args.splitting_strength
 
     # ADMM-related weights (can co-exist with denoise)
-    if args.method in ["admm_denoiser", "apgda_denoiser", "weighted_tv"]:
+    if args.method in ["admm_denoiser", "apgda_denoiser"]:
         reg["admm_weight"] = args.admm_weight
-
     return reg
 
 
@@ -231,7 +216,6 @@ def get_suffix(args, reg_strengths):
     """
     parts = []
 
-    # --- Common structure ---
     # Denoiser type
     if args.method in METHODS_WITH_DENOISER and args.denoiser_method:
         parts.append(f"{args.denoiser_method}")
@@ -243,14 +227,10 @@ def get_suffix(args, reg_strengths):
         parts.append(f"exp{args.exp_weight}")
     else:
         parts.append("noexp")
-    # Method-specific unique params
+
     if args.method == "selfguided":
         parts.append(f"noise{args.num_noise_realisations}")
 
-    if args.method == "weighted_tv":
-        parts.append(f"varreg{args.variable_regularisation}")
-
-    # --- Regularisation parameters (from get_reg_strength) ---
     name_map = {
         "denoise_strength": "denoise",
         "tv_strength": "denoise",       
@@ -273,9 +253,9 @@ def make_paths_and_logger(args):
     time_now = datetime.now().strftime("%Y%m%d_%H%M%S")
 
     suffix = f"{args.model_inp}_{args.lr}{suffix}" if use_inp_and_lr else suffix
-    # --- Paths ---
+    # ----- Paths
     base_path = f"results/paper/{args.method}/{suffix}/run_{time_now}"
-    # base_path = f"results/{args.method}/{args.model_inp}_{args.lr}{suffix}/run_{time_now}"
+
     paths = {
         "base": base_path,
         "imgs": os.path.join(base_path, "imgs"),
@@ -284,7 +264,7 @@ def make_paths_and_logger(args):
     for p in paths.values():
         os.makedirs(p, exist_ok=True)
 
-    # --- Logger config ---
+    # ----- Logger config
     from configs.wandb_config import WANDB_ENTITY
     wandb_project = args.wandb_project if args.wandb_project is not None else "DIP_Experiments"
     wandb_entity = WANDB_ENTITY
@@ -393,20 +373,20 @@ def run_dip(args, logger=None, paths=None):
         g.manual_seed(args.random_seed_noise)
         z = 0.1 * torch.randn(x.shape, generator=g)
 
-    noise_std = 0.0
-
     z = z.to(device)
-    y_noise = y.to(device)
     
     best_psnr = {'value': 0, 'idx': 0, 'reco': None}
     best_psnr_early_stopping = {'value': 0, 'index': 0, 'reco': None}
     patience = 1000
+
     if args.method in METHODS_WITH_INNER_STEPS:
         patience = min(100, int(patience / args.num_inner_steps))
+
     delta = 0.90
     w = 100 
     delta = 0.98 
     variance_list = []
+
     callbacks = [track_best_psnr_output(best_psnr), 
                  save_images(save_dir_img, skip=10), 
                  early_stopping(patience=patience, delta=delta, w=w, variance_list=variance_list, best_psnr=best_psnr_early_stopping)]
@@ -537,7 +517,6 @@ def run_dip(args, logger=None, paths=None):
             x_gt=x,
             logger=logger,
             num_inner_steps=args.num_inner_steps,
-            logger_kwargs=logger_kwargs,
         )
     elif args.method == "selfguided":
         dip = SelfGuidanceDeepImagePrior(
@@ -558,62 +537,10 @@ def run_dip(args, logger=None, paths=None):
             exp_weight=args.exp_weight,
             lr_z=args.lr_z,
         )
-    elif args.method == "weighted_tv":
-        raise NotImplementedError("weighted_TV is not implemented yet (properly).")
-        dip = WeightedTVDeepImagePrior(
-            model=model,
-            lr=args.lr,
-            num_steps=args.num_steps,
-            noise_std=args.noise_std,
-            tv_strength=args.regularisation_strength,
-            variable_regularisation=args.variable_regularisation,
-            callbacks=callbacks,
-        )
-        x_pred, psnr_list, loss_list = dip.train(
-            ray_trafo,
-            y,
-            z,
-            x_gt=x,
-            logger=logger,
-            num_inner_steps=args.num_inner_steps,
-            admm_weight = args.admm_weight,
-            logger_kwargs=logger_kwargs,
-        )
-    elif args.method == "reddip":
-        raise NotImplementedError("RED-DIP is not implemented yet (properly).")
-        #Fix this
-        # todo adjust all so that the denoiser is passed instead of the string
-        import deepinv as dinv
-        if args.denoiser_method == "bm3d":
-            denoiser = dinv.models.BM3D()
-        elif args.denoiser_method == "drunet":
-            denoiser = dinv.models.DRUNet(in_channels=1, out_channels=1, pretrained="drunet_gray.pth")
-        elif args.denoiser_method == "dncnn":
-            denoiser = dinv.models.DnCNN(in_channels=1, out_channels=1, pretrained=True)
-        else:
-            raise NotImplementedError(f"Unknown denoiser method: {args.denoiser_method}")
-        # breakpoint()
-        dip = REDDeepImagePrior(
-            model=model,
-            lr=args.lr,
-            num_steps=args.num_steps,
-            noise_std=args.noise_std,
-            denoise_strength=args.denoise_strength,
-            denoiser=denoiser,
-            callbacks=callbacks,
-        )
-        x_pred, psnr_list, loss_list = dip.train(
-            ray_trafo,
-            y,
-            z,
-            x_gt=x,
-            logger=logger,
-            num_inner_steps=args.num_inner_steps,
-            logger_kwargs=logger_kwargs,
-        )
     else:
         raise NotImplementedError
 
+    # ----- Plotting the reconstructions
     img = x_pred.detach().cpu().numpy()[0, 0] * 255
     img = img.astype(np.uint8)
     Image.fromarray(img).save(os.path.join(paths["imgs"], "Final_Reconstruction.png"))
@@ -622,6 +549,7 @@ def run_dip(args, logger=None, paths=None):
     img = img.astype(np.uint8)
     Image.fromarray(img).save(os.path.join(paths["imgs"], "Best_Reconstruction.png"))
 
+    # ----- Saving the results
     results = {}
     results["psnrs"] = [float(x) for x in psnr_list]
     results["loss"] = [float(x) for x in loss_list]
@@ -642,6 +570,7 @@ def run_dip(args, logger=None, paths=None):
     with open(os.path.join(paths["base"], "settings.yaml"), "w") as f:
         yaml.dump(settings, f)
 
+    # ----- Plotting the scalars
     loss_list = np.asarray(loss_list)
     np.save(os.path.join(paths["base"], "loss.npy"), loss_list)
 
@@ -649,7 +578,6 @@ def run_dip(args, logger=None, paths=None):
     np.save(os.path.join(paths["base"], "psnrs.npy"), psnr_list)
     print(f"Results saved to: {paths['base']}")
 
-    steps = np.arange(1, len(psnr_list) + 1)
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4))
 
     ax1.plot(psnr_list)
@@ -663,7 +591,7 @@ def run_dip(args, logger=None, paths=None):
     ax2.grid(True)
 
     plt.tight_layout()
-    plt.savefig(os.path.join(paths["base"], "psnrNloss.png"))
+    plt.savefig(os.path.join(paths["base"], "psnr_and_loss.png"))
     plt.close(fig)
 
 
